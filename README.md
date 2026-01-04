@@ -1,168 +1,67 @@
-# Python Project Setup with Conventional Commits & Linting
+# Travel Order Resolver
 
-This setup includes:
-- **Git hooks** for conventional commits validation
-- **Pre-commit hooks** for automatic code formatting and linting
-- **GitHub Actions** workflow for CI/CD checks on PRs
+The **Travel Order Resolver** is an academic Python project whose goal is to
+transform a free-form travel order (in natural language) into structured
+information that can be used to compute and justify an itinerary.
 
-## Quick Setup
+At this stage, the focus is on designing a clear, modular and typed
+architecture. All business logic (NLP, graph construction and path-finding) is
+intentionally left unimplemented.
 
-### 1. Install Dependencies
+## Global Pipeline
 
-```bash
-pip install -r requirements-dev.txt
-```
+The project is organized as a pipeline with four main stages:
 
-### 2. Install Pre-commit Hooks
+1. **Input** – acquire a sentence describing a travel order (text now, possibly
+   speech-to-text later).
+2. **NLP** – detect the user's intent and extract departure/arrival stations.
+3. **Graph** – load a transportation graph from CSV files into an in-memory
+   structure.
+4. **Output** – compute and prepare a candidate route (e.g. using Dijkstra).
 
-```bash
-pre-commit install --hook-type commit-msg --hook-type pre-commit
-```
+The pipeline is orchestrated by `src/pipeline.py`, which wires these steps
+together but delegates all real work to dedicated modules.
 
-This installs two types of hooks:
-- **pre-commit**: Runs linters/formatters before each commit
-- **commit-msg**: Validates commit messages follow conventional commit format
+## Modular Architecture
 
-### 3. Make Your First Commit
+The code is split into independent bricks, each with a well-defined interface:
 
-Use commitizen for interactive commit messages:
+- `src/io/` – input acquisition (`get_input_text`).
+- `src/nlp/` – natural language processing:
+  - `intent.py` defines the `Intent` enum and the `detect_intent` interface.
+  - `extract_stations.py` defines the `StationExtractionResult` dataclass and
+    the `extract_stations` interface.
+- `src/graph/` – graph management:
+  - `load_graph.py` defines the `Graph` type and the `load_graph` interface
+    (CSV → graph).
+  - `dijkstra.py` declares the `dijkstra` function used for shortest-path
+    computation.
+- `src/pipeline.py` – high-level orchestration of the pipeline.
 
-```bash
-cz commit
-```
+Each module is fully typed and documented with docstrings, but all functions
+raise `NotImplementedError`. This ensures that:
 
-Or write conventional commits manually:
+- the project imports cleanly,
+- the architecture is stable and testable,
+- the actual algorithms and heuristics can be introduced incrementally.
 
-```bash
-git commit -m "feat: add new feature"
-git commit -m "fix: resolve bug in module"
-git commit -m "docs: update README"
-```
+## Data and Tests
 
-## Conventional Commit Format
+The `data/` directory contains placeholder CSV files:
 
-```
-<type>[optional scope]: <description>
+- `data/stations.csv` – list of stations,
+- `data/edges.csv` – edges between stations with an associated weight.
 
-[optional body]
+The `tests/` package is present but empty, ready to receive unit tests as soon
+as the individual bricks (NLP, graph loading, Dijkstra, etc.) are implemented.
 
-[optional footer(s)]
-```
+> Dataset fictif utilisé uniquement pour la baseline du projet.
 
-**Types:**
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting, etc.)
-- `refactor`: Code refactoring
-- `test`: Adding or updating tests
-- `chore`: Maintenance tasks
-- `ci`: CI/CD changes
-- `perf`: Performance improvements
+## Next Steps
 
-**Examples:**
-```
-feat(auth): add login functionality
-fix(api): resolve timeout issue
-docs: update installation guide
-```
-
-## Linting Tools
-
-### Black (Code Formatter)
-Automatically formats your code to conform to PEP 8.
-
-```bash
-black .
-```
-
-### isort (Import Sorter)
-Sorts and organizes imports.
-
-```bash
-isort .
-```
-
-### flake8 (Linter)
-Checks code for style issues and errors.
-
-```bash
-flake8 .
-```
-
-### mypy (Type Checker)
-Performs static type checking.
-
-```bash
-mypy .
-```
-
-### Run All Checks Manually
-
-```bash
-pre-commit run --all-files
-```
-
-## GitHub Actions Workflow
-
-The `.github/workflows/lint.yml` workflow runs automatically on:
-- Pull requests to `main` or `develop`
-- Pushes to `main` or `develop`
-
-It checks:
-- Code formatting (Black)
-- Import sorting (isort)
-- Linting (flake8)
-- Type checking (mypy)
-- Tests (pytest, if tests exist)
-
-## Project Structure
-
-```
-your-project/
-├── .github/
-│   └── workflows/
-│       └── lint.yml          # CI/CD workflow
-├── src/                       # Source code
-├── tests/                     # Test files
-├── .pre-commit-config.yaml   # Pre-commit configuration
-├── pyproject.toml            # Project configuration
-├── requirements.txt          # Production dependencies
-└── requirements-dev.txt      # Development dependencies
-```
-
-## Tips
-
-1. **Bypass hooks** (not recommended):
-   ```bash
-   git commit --no-verify -m "message"
-   ```
-
-2. **Update pre-commit hooks**:
-   ```bash
-   pre-commit autoupdate
-   ```
-
-3. **Skip specific files**:
-   Add to `.pre-commit-config.yaml`:
-   ```yaml
-   exclude: ^(path/to/file\.py|another/file\.py)$
-   ```
-
-4. **Configure in IDE**:
-   - VS Code: Install Python, Black, and isort extensions
-   - PyCharm: Enable Black and configure in Settings → Tools
-
-## Troubleshooting
-
-**Hook installation failed:**
-```bash
-pre-commit clean
-pre-commit install --hook-type commit-msg --hook-type pre-commit
-```
-
-**Commit message rejected:**
-Ensure your commit follows conventional commit format: `type: description`
-
-**Linting failures:**
-Run `pre-commit run --all-files` to see all issues and fix them before committing.
+- Implement intent detection and station extraction strategies in `src/nlp/`.
+- Implement CSV parsing and graph construction in `src/graph/load_graph.py`.
+- Implement Dijkstra’s algorithm in `src/graph/dijkstra.py` and analyze its
+  complexity.
+- Add unit tests under `tests/` to validate each brick independently and the
+  pipeline as a whole.
