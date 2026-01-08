@@ -60,3 +60,5 @@ def run_pipeline() -> None:
 if __name__ == "__main__":
     run_pipeline()
 
+from src.graph.load_graph import load_graph
+load_graph("data/stations.csv", "data/edges.csv")

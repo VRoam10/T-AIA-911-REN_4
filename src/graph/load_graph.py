@@ -4,39 +4,29 @@ This module defines the Graph type used throughout the project and the
 interface for loading it from tabular data stored in CSV files.
 """
 
+import csv
 from typing import Dict, List, Tuple
 
 Graph = Dict[str, List[Tuple[str, float]]]
-"""Type alias for the transportation graph.
-
-Each key represents a station identifier, and the associated value is a
-list of `(neighbor_station, weight)` pairs, where the weight typically
-corresponds to a distance, duration, or cost.
-"""
-
 
 def load_graph(stations_path: str, edges_path: str) -> Graph:
-    """Load a transportation graph from CSV files.
+    graph: Graph = {}
 
-    Parameters
-    ----------
-    stations_path:
-        Path to the CSV file describing the set of stations.
-    edges_path:
-        Path to the CSV file describing connections between stations,
-        along with their associated weights.
+    # 1) Initialiser tous les sommets à partir de stations.csv
+    with open(stations_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            station_id = row["station_id"]
+            graph[station_id] = []
 
-    Returns
-    -------
-    Graph
-        An in-memory adjacency-list representation of the network.
+    # 2) Ajouter les arêtes à partir de edges.csv
+    with open(edges_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            from_id = row["from_station_id"]
+            to_id = row["to_station_id"]
+            distance = float(row["distance_km"])
+            # on ajoute l’arête orientée from_id -> to_id
+            graph.setdefault(from_id, []).append((to_id, distance))
 
-    Notes
-    -----
-    The implementation will parse the CSV files and transform them into
-    the `Graph` structure defined above. At this stage, only the
-    interface and typing are provided; the actual CSV-to-graph
-    transformation will be implemented later.
-    """
-    raise NotImplementedError("Graph loading is not implemented yet.")
-
+    return graph
