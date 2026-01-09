@@ -1,6 +1,7 @@
 # Python Project Setup with Conventional Commits & Linting
 
 This setup includes:
+
 - **Git hooks** for conventional commits validation
 - **Pre-commit hooks** for automatic code formatting and linting
 - **GitHub Actions** workflow for CI/CD checks on PRs
@@ -13,6 +14,8 @@ This setup includes:
 pip install -r requirements-dev.txt
 ```
 
+and install [cuda v12.4](https://developer.nvidia.com/cuda-12-4-1-download-archive) if you have a compatible GPU for faster-whisper
+
 ### 2. Install Pre-commit Hooks
 
 ```bash
@@ -20,6 +23,7 @@ pre-commit install --hook-type commit-msg --hook-type pre-commit
 ```
 
 This installs two types of hooks:
+
 - **pre-commit**: Runs linters/formatters before each commit
 - **commit-msg**: Validates commit messages follow conventional commit format
 
@@ -50,6 +54,7 @@ git commit -m "docs: update README"
 ```
 
 **Types:**
+
 - `feat`: New feature
 - `fix`: Bug fix
 - `docs`: Documentation changes
@@ -61,6 +66,7 @@ git commit -m "docs: update README"
 - `perf`: Performance improvements
 
 **Examples:**
+
 ```
 feat(auth): add login functionality
 fix(api): resolve timeout issue
@@ -70,6 +76,7 @@ docs: update installation guide
 ## Linting Tools
 
 ### Black (Code Formatter)
+
 Automatically formats your code to conform to PEP 8.
 
 ```bash
@@ -77,6 +84,7 @@ black .
 ```
 
 ### isort (Import Sorter)
+
 Sorts and organizes imports.
 
 ```bash
@@ -84,6 +92,7 @@ isort .
 ```
 
 ### flake8 (Linter)
+
 Checks code for style issues and errors.
 
 ```bash
@@ -91,6 +100,7 @@ flake8 .
 ```
 
 ### mypy (Type Checker)
+
 Performs static type checking.
 
 ```bash
@@ -106,10 +116,12 @@ pre-commit run --all-files
 ## GitHub Actions Workflow
 
 The `.github/workflows/lint.yml` workflow runs automatically on:
+
 - Pull requests to `main` or `develop`
 - Pushes to `main` or `develop`
 
 It checks:
+
 - Code formatting (Black)
 - Import sorting (isort)
 - Linting (flake8)
@@ -134,17 +146,20 @@ your-project/
 ## Tips
 
 1. **Bypass hooks** (not recommended):
+
    ```bash
    git commit --no-verify -m "message"
    ```
 
 2. **Update pre-commit hooks**:
+
    ```bash
    pre-commit autoupdate
    ```
 
 3. **Skip specific files**:
    Add to `.pre-commit-config.yaml`:
+
    ```yaml
    exclude: ^(path/to/file\.py|another/file\.py)$
    ```
@@ -156,6 +171,7 @@ your-project/
 ## Troubleshooting
 
 **Hook installation failed:**
+
 ```bash
 pre-commit clean
 pre-commit install --hook-type commit-msg --hook-type pre-commit
