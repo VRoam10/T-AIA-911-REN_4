@@ -1,67 +1,98 @@
 # Travel Order Resolver
 
-The **Travel Order Resolver** is an academic Python project whose goal is to
-transform a free-form travel order (in natural language) into structured
-information that can be used to compute and justify an itinerary.
+Le **Travel Order Resolver** est un projet académique en Python qui transforme une phrase en français décrivant un trajet en une structure exploitable : il extrait une gare de départ et une gare d’arrivée, puis calcule le chemin le plus court entre ces deux gares à l’aide d’un graphe et de l’algorithme de Dijkstra.
 
-At this stage, the focus is on designing a clear, modular and typed
-architecture. All business logic (NLP, graph construction and path-finding) is
-intentionally left unimplemented.
+Le projet fonctionne entièrement hors‑ligne et sert de baseline pour explorer différentes approches de traitement du langage naturel (NLP).
 
-## Global Pipeline
+## Description
 
-The project is organized as a pipeline with four main stages:
+À partir d’une phrase simple comme :
 
-1. **Input** – acquire a sentence describing a travel order (text now, possibly
-   speech-to-text later).
-2. **NLP** – detect the user's intent and extract departure/arrival stations.
-3. **Graph** – load a transportation graph from CSV files into an in-memory
-   structure.
-4. **Output** – compute and prepare a candidate route (e.g. using Dijkstra).
+> Je veux aller de Paris à Marseille
 
-The pipeline is orchestrated by `src/pipeline.py`, which wires these steps
-together but delegates all real work to dedicated modules.
+le pipeline actuel :
 
-## Modular Architecture
+1. analyse le texte pour détecter les gares mentionnées (départ et arrivée) ;
+2. charge un graphe de transport fictif à partir de fichiers CSV ;
+3. calcule le plus court chemin entre les deux gares avec Dijkstra ;
+4. affiche le trajet et la distance totale.
 
-The code is split into independent bricks, each with a well-defined interface:
+Le but est pédagogique : poser une architecture propre et extensible, puis améliorer progressivement la partie NLP.
 
-- `src/io/` – input acquisition (`get_input_text`).
-- `src/nlp/` – natural language processing:
-  - `intent.py` defines the `Intent` enum and the `detect_intent` interface.
-  - `extract_stations.py` defines the `StationExtractionResult` dataclass and
-    the `extract_stations` interface.
-- `src/graph/` – graph management:
-  - `load_graph.py` defines the `Graph` type and the `load_graph` interface
-    (CSV → graph).
-  - `dijkstra.py` declares the `dijkstra` function used for shortest-path
-    computation.
-- `src/pipeline.py` – high-level orchestration of the pipeline.
+## Architecture globale
 
-Each module is fully typed and documented with docstrings, but all functions
-raise `NotImplementedError`. This ensures that:
+Le code est organisé en trois briques principales :
 
-- the project imports cleanly,
-- the architecture is stable and testable,
-- the actual algorithms and heuristics can be introduced incrementally.
+- `src/nlp/` – traitement du texte :
+  - `extract_stations.py` extrait la gare de départ et la gare d’arrivée à partir d’une phrase en français, en utilisant des règles simples basées sur les noms de villes connus dans le CSV.
+- `src/graph/` – gestion du graphe :
+  - `load_graph.py` charge les stations et les arêtes depuis les fichiers CSV (`stations.csv`, `edges.csv`) et construit une structure de graphe en mémoire.
+  - `dijkstra.py` implémente l’algorithme de Dijkstra pour calculer le plus court chemin entre deux gares.
+- `src/pipeline.py` – orchestration :
+  - enchaîne l’extraction des gares, le chargement du graphe et l’appel à Dijkstra ;
+  - utilise actuellement une phrase d’exemple codée en dur pour valider la baseline.
 
-## Data and Tests
+D’autres modules (`src/nlp/intent.py`, `src/io/input_text.py`) existent mais ne sont pas encore implémentés dans la baseline actuelle.
 
-The `data/` directory contains placeholder CSV files:
+## Données
 
-- `data/stations.csv` – list of stations,
-- `data/edges.csv` – edges between stations with an associated weight.
+Le dossier `data/` contient les fichiers CSV utilisés par le pipeline :
 
-The `tests/` package is present but empty, ready to receive unit tests as soon
-as the individual bricks (NLP, graph loading, Dijkstra, etc.) are implemented.
+- `data/stations.csv` : liste de gares fictives (identifiant de gare et nom de ville) ;
+- `data/edges.csv` : liste d’arêtes entre gares avec une distance (poids).
 
-> Dataset fictif utilisé uniquement pour la baseline du projet.
+Ces données :
 
-## Next Steps
+- sont entièrement **fictives** ;
+- servent uniquement à vérifier que le pipeline de base fonctionne ;
+- pourront être remplacées plus tard par un jeu de données plus riche ou plus réaliste.
 
-- Implement intent detection and station extraction strategies in `src/nlp/`.
-- Implement CSV parsing and graph construction in `src/graph/load_graph.py`.
-- Implement Dijkstra’s algorithm in `src/graph/dijkstra.py` and analyze its
-  complexity.
-- Add unit tests under `tests/` to validate each brick independently and the
-  pipeline as a whole.
+## Lancer le pipeline
+
+### Prérequis
+
+- Python **3.9** ou version supérieure.
+
+Aucune dépendance externe n’est nécessaire : le projet utilise uniquement la bibliothèque standard de Python.
+
+### Commande
+
+Depuis la racine du projet (`T-AIA-911-REN_4`), exécuter :
+
+```bash
+python -m src.pipeline
+```
+
+Cela lance le pipeline de démonstration avec la phrase d’exemple intégrée dans `src/pipeline.py`.
+
+## Exemple de sortie
+
+Pour la phrase :
+
+> Je veux aller de Paris à Marseille
+
+une exécution typique donne :
+
+```text
+Sentence: Je veux aller de Paris à Marseille
+Departure: PAR
+Arrival: MAR
+Shortest path: PAR -> DIJ -> LYO -> MAR
+Total distance: 835.0 km
+```
+
+Les valeurs exactes dépendent uniquement des fichiers CSV fournis dans `data/`, qui sont conçus pour valider ce scénario de base.
+
+## État actuel du projet
+
+À ce stade :
+
+- le **pipeline baseline** est fonctionnel (chargement du graphe, extraction de gares sur phrases simples, calcul du plus court chemin) ;
+- la partie **NLP** est volontairement simple et **basée sur des règles** :
+  - recherche de noms de villes connus dans la phrase ;
+  - première ville trouvée = départ, deuxième ville = arrivée ;
+- l’objectif est d’**améliorer progressivement le NLP** et de **comparer plusieurs approches** (règles, modèles plus avancés, etc.), tout en gardant la même interface.
+
+Certains modules (détection d’intention, entrée texte générique, tests automatisés) sont encore à l’état de squelette et seront complétés dans les étapes suivantes du projet.
+
+
