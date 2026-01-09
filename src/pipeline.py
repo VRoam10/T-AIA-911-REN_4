@@ -16,9 +16,10 @@ from pathlib import Path
 
 from .graph.dijkstra import dijkstra
 from .graph.load_graph import Graph, load_graph
-from .io.input_text import get_input_text
 from .nlp.extract_stations import StationExtractionResult, extract_stations
-from .nlp.intent import Intent, detect_intent
+# from .nlp.intent import Intent, detect_intent
+# from .io.input_text import get_input_text
+
 
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -32,33 +33,35 @@ def run_pipeline() -> None:
     The function defines the high-level orchestration of the project
     without providing the concrete implementations of each step.
     """
-    # Acquire raw input text.
-    text = get_input_text()
 
-    # Detect the intent behind the sentence.
-    intent: Intent = detect_intent(text)
+    sentence = "Je veux aller de Paris à Marseille"
+    print("Sentence:", sentence)
 
-    # Extract stations from the sentence.
-    stations: StationExtractionResult = extract_stations(text)
+    result = extract_stations(sentence)
 
-    # Load the transportation graph from CSV files.
-    graph: Graph = load_graph(str(STATIONS_CSV), str(EDGES_CSV))
+    if result.error:
+        print("Extraction error:", result.error)
+        return
 
-    # Compute a route between the extracted stations.
-    # Error handling and validation of extracted data will be added
-    # together with the future implementations.
-    _path, _cost = dijkstra(
-        graph=graph,
-        start=stations.departure or "",
-        end=stations.arrival or "",
-    )
+    departure = result.departure
+    arrival = result.arrival
 
-    # The final stage (formatting and presenting the result) is
-    # intentionally left undefined at this point.
+    print("Departure:", departure)
+    print("Arrival:", arrival)
+
+    graph = load_graph(str(STATIONS_CSV), str(EDGES_CSV))
+
+
+    path, distance = dijkstra(graph, departure, arrival)
+
+    if not path:
+        print("No path found.")
+        return
+    
+    print("Shortest path:", " -> ".join(path))
+    print("Total distance:", distance, "km")
+
 
 
 if __name__ == "__main__":
     run_pipeline()
-
-from src.graph.load_graph import load_graph
-load_graph("data/stations.csv", "data/edges.csv")
