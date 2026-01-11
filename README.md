@@ -1,6 +1,11 @@
 # Travel Order Resolver
 
 Le **Travel Order Resolver** est un projet académique en Python qui transforme une phrase en français décrivant un trajet en une structure exploitable : il extrait une gare de départ et une gare d’arrivée, puis calcule le chemin le plus court entre ces deux gares à l’aide d’un graphe et de l’algorithme de Dijkstra.
+This setup includes:
+
+- **Git hooks** for conventional commits validation
+- **Pre-commit hooks** for automatic code formatting and linting
+- **GitHub Actions** workflow for CI/CD checks on PRs
 
 Le projet fonctionne entièrement hors‑ligne et sert de baseline pour explorer différentes approches de traitement du langage naturel (NLP).
 
@@ -9,6 +14,9 @@ Le projet fonctionne entièrement hors‑ligne et sert de baseline pour explorer
 À partir d’une phrase simple comme :
 
 > Je veux aller de Paris à Marseille
+and install [cuda v12.4](https://developer.nvidia.com/cuda-12-4-1-download-archive) if you have a compatible GPU for faster-whisper
+
+### 2. Install Pre-commit Hooks
 
 le pipeline actuel :
 
@@ -16,6 +24,10 @@ le pipeline actuel :
 2. charge un graphe de transport fictif à partir de fichiers CSV ;
 3. calcule le plus court chemin entre les deux gares avec Dijkstra ;
 4. affiche le trajet et la distance totale.
+This installs two types of hooks:
+
+- **pre-commit**: Runs linters/formatters before each commit
+- **commit-msg**: Validates commit messages follow conventional commit format
 
 Le but est pédagogique : poser une architecture propre et extensible, puis améliorer progressivement la partie NLP.
 
@@ -40,24 +52,55 @@ Le dossier `data/` contient les fichiers CSV utilisés par le pipeline :
 
 - `data/stations.csv` : liste de gares fictives (identifiant de gare et nom de ville) ;
 - `data/edges.csv` : liste d’arêtes entre gares avec une distance (poids).
+**Types:**
+
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, etc.)
+- `refactor`: Code refactoring
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks
+- `ci`: CI/CD changes
+- `perf`: Performance improvements
+
+**Examples:**
+
+```
+feat(auth): add login functionality
+fix(api): resolve timeout issue
+docs: update installation guide
+```
 
 Ces données :
 
 - sont entièrement **fictives** ;
 - servent uniquement à vérifier que le pipeline de base fonctionne ;
 - pourront être remplacées plus tard par un jeu de données plus riche ou plus réaliste.
+### Black (Code Formatter)
+
+Automatically formats your code to conform to PEP 8.
 
 ## Lancer le pipeline
 
 ### Prérequis
+### isort (Import Sorter)
+
+Sorts and organizes imports.
 
 - Python **3.9** ou version supérieure.
 
 Aucune dépendance externe n’est nécessaire : le projet utilise uniquement la bibliothèque standard de Python.
+### flake8 (Linter)
+
+Checks code for style issues and errors.
 
 ### Commande
 
 Depuis la racine du projet (`T-AIA-911-REN_4`), exécuter :
+### mypy (Type Checker)
+
+Performs static type checking.
 
 ```bash
 python -m src.pipeline
@@ -70,6 +113,18 @@ Cela lance le pipeline de démonstration avec la phrase d’exemple intégrée d
 Pour la phrase :
 
 > Je veux aller de Paris à Marseille
+The `.github/workflows/lint.yml` workflow runs automatically on:
+
+- Pull requests to `main` or `develop`
+- Pushes to `main` or `develop`
+
+It checks:
+
+- Code formatting (Black)
+- Import sorting (isort)
+- Linting (flake8)
+- Type checking (mypy)
+- Tests (pytest, if tests exist)
 
 une exécution typique donne :
 
@@ -86,6 +141,24 @@ Les valeurs exactes dépendent uniquement des fichiers CSV fournis dans `data/`,
 ## État actuel du projet
 
 À ce stade :
+1. **Bypass hooks** (not recommended):
+
+   ```bash
+   git commit --no-verify -m "message"
+   ```
+
+2. **Update pre-commit hooks**:
+
+   ```bash
+   pre-commit autoupdate
+   ```
+
+3. **Skip specific files**:
+   Add to `.pre-commit-config.yaml`:
+
+   ```yaml
+   exclude: ^(path/to/file\.py|another/file\.py)$
+   ```
 
 - le **pipeline baseline** est fonctionnel (chargement du graphe, extraction de gares sur phrases simples, calcul du plus court chemin) ;
 - la partie **NLP** est volontairement simple et **basée sur des règles** :
@@ -94,5 +167,13 @@ Les valeurs exactes dépendent uniquement des fichiers CSV fournis dans `data/`,
 - l’objectif est d’**améliorer progressivement le NLP** et de **comparer plusieurs approches** (règles, modèles plus avancés, etc.), tout en gardant la même interface.
 
 Certains modules (détection d’intention, entrée texte générique, tests automatisés) sont encore à l’état de squelette et seront complétés dans les étapes suivantes du projet.
+## Troubleshooting
+
+**Hook installation failed:**
+
+```bash
+pre-commit clean
+pre-commit install --hook-type commit-msg --hook-type pre-commit
+```
 
 
