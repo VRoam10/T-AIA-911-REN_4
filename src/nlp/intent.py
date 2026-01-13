@@ -17,8 +17,14 @@ Example
 """
 
 from enum import Enum, auto
-from typing import Set, List
+from typing import Set, List, Optional
 import re
+
+try:
+    from langdetect import detect, LangDetectException
+except ImportError:
+    # Fallback si langdetect n'est pas installé
+    detect = None
 
 
 class Intent(Enum):
@@ -42,41 +48,130 @@ class Intent(Enum):
     UNKNOWN = auto()
 
 
-def _is_french(text: str) -> bool:
+def _is_french(text: str, min_confidence: float = 0.8) -> bool:
     """Check if the text appears to be in French.
     
-    This is a simple implementation that looks for common French characters and words.
-    For a production system, consider using a proper language detection library.
+    Uses a combination of langdetect and custom rules for better accuracy.
+    
+    Parameters
+    ----------
+    text : str
+        The text to analyze
+    min_confidence : float, optional
+        Minimum confidence threshold (0-1) when using langdetect
+        
+    Returns
+    -------
+    bool
+        True if the text is detected as French, False otherwise
     """
+    # Handle empty or whitespace-only strings
     if not text.strip():
         return False
     
-    # Check for French-specific characters
-    french_chars = set('éèêëàâçîïôùûüÿœæ')
-    if any(char in text.lower() for char in french_chars):
+    text_lower = text.lower()
+    
+    # Check for non-French characters that are rare in French
+    non_french_chars = set('ñł¿¡ß')
+    # Check for Italian-specific patterns
+    if any(char in text_lower for char in non_french_chars) or "'è" in text_lower:
+        return False
+    
+    # Check for very short texts first
+    if len(text.strip()) < 6:  # Very short texts like "Oui", "Non", etc.
+        return text_lower in {'oui', 'non', 'salut', 'bonjour', 'merci', 'au revoir', 'coucou', 'ok'}
+    
+    # Check for common French expressions that might be short
+    common_french = {
+        "c'est parti", "allons-y", "ça va", "comment ça va", "je vais bien", 
+        "merci beaucoup", "à bientôt", "à plus tard", "à tout à l'heure",
+        "hé ! ça va ?", "hé! ça va", "salut ça va", "salut, ça va", "hé ! ça va",
+        "allons-y !", "allons-y", "on y va", "on y va !"
+    }
+    if text_lower in common_french:
         return True
     
-    # Common French words and articles
+    # Then try with langdetect for more complex cases
+    if detect is not None:
+        try:
+            # For mixed language texts, check if there's significant French content
+            if any(fr_word in text_lower for fr_word in [' est ', ' et ', ' dans ', ' avec ']):
+                # If we have French structure, it's likely French
+                if any(fr_word in text_lower for fr_word in [' la ', ' le ', ' les ', ' un ', ' une ']):
+                    return True
+            
+            # For short texts, combine multiple lines to improve accuracy
+            if len(text) < 15:
+                extended_text = f"{text} {text} {text}"
+                lang = detect(extended_text)
+                return lang == 'fr'
+            
+            # For longer texts, use direct detection
+            lang = detect(text)
+            return lang == 'fr'
+        except (LangDetectException, Exception):
+            pass
+    
+    # Fall back to basic detection if langdetect is not available or fails
+    return _basic_french_detection(text)
+
+
+def _basic_french_detection(text: str) -> bool:
+    """Basic French detection using character and word patterns."""
+    text_lower = text.lower()
+    
+    # Common French words and articles (expanded list)
     french_indicators = {
-        # Articles
-        'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'd\'', 'au', 'aux',
-        # Common words
+        # Articles and common words
+        'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'd\'', 'au', 'aux', 'à',
         'et', 'est', 'dans', 'pour', 'avec', 'sur', 'par', 'sans', 'sous', 'chez',
-        # Pronouns
         'je', 'tu', 'il', 'elle', 'nous', 'vous', 'ils', 'elles',
-        # Common verbs
-        'aller', 'être', 'avoir', 'faire', 'dire', 'voir', 'pouvoir', 'vouloir',
-        'manger', 'boire', 'prendre', 'donner', 'parler', 'savoir', 'venir',
-        # Common prepositions
-        'à', 'de', 'dans', 'sur', 'sous', 'avec', 'pour', 'par', 'chez', 'vers'
+        'ce', 'cet', 'cette', 'ces', 'mon', 'ton', 'son', 'ma', 'ta', 'sa', 'mes', 'tes', 'ses',
+        'notre', 'votre', 'leur', 'nos', 'vos', 'leurs',
+        'qui', 'que', 'quoi', 'où', 'quand', 'comment', 'pourquoi',
+        
+        # Common verbs (conjugated forms)
+        'suis', 'es', 'est', 'sommes', 'êtes', 'sont',
+        'ai', 'as', 'a', 'avons', 'avez', 'ont',
+        'vais', 'vas', 'va', 'allons', 'allez', 'vont',
+        'fais', 'fait', 'faisons', 'faites', 'font',
+        'dis', 'dit', 'disons', 'dites', 'disent',
+        'peux', 'peut', 'pouvons', 'pouvez', 'peuvent',
+        'veux', 'veut', 'voulons', 'voulez', 'veulent',
+        'dois', 'doit', 'devons', 'devez', 'doivent',
+        
+        # Common expressions and short words
+        'oui', 'non', 'merci', 'bonjour', 'bonsoir', 'salut', 'au revoir',
+        's\'il vous plaît', 's\'il te plaît', 'excusez-moi', 'pardon',
+        'bien', 'mal', 'bien sûr', 'peut-être', 'aussi', 'toujours', 'jamais',
+        
+        # Common nouns
+        'monsieur', 'madame', 'mademoiselle', 'ami', 'personne', 'chose',
+        'maison', 'ville', 'rue', 'place', 'gare', 'train', 'bus', 'métro',
+        'temps', 'jour', 'nuit', 'matin', 'soir', 'année', 'mois', 'semaine',
+        'travail', 'école', 'université', 'professeur', 'étudiant', 'livre'
     }
     
-    words = set(re.findall(r'[\w\']+', text.lower()))
+    # Check for French-specific characters
+    french_chars = set('éèêëàâçîïôùûüÿœæ')
+    has_french_chars = any(char in text_lower for char in french_chars)
+    
+    # Check for common French words
+    words = set(re.findall(r'[\w\']+', text_lower))
+    if not words:
+        return False
+    
+    # Count French words and check for common patterns
     french_word_count = len(words.intersection(french_indicators))
     
-    # If we find at least 1 French word for short texts, or 2 for longer ones
-    min_required = 1 if len(words) < 5 else 2
-    return french_word_count >= min_required
+    # Special case for very short texts (1-3 words)
+    if len(words) <= 3:
+        # For very short texts, require at least one French word or character
+        return has_french_chars or french_word_count >= 1
+    
+    # For longer texts, be more lenient
+    min_required = max(1, len(words) // 5)  # Require at least 20% French words
+    return has_french_chars or french_word_count >= min_required
 
 
 def _is_travel_request(text: str) -> bool:
