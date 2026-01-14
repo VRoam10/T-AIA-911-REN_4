@@ -34,7 +34,7 @@ def run_pipeline() -> None:
     without providing the concrete implementations of each step.
     """
 
-    sentence = "Je veux aller de Paris à Marseille"
+    sentence = "Je veux aller de Rennes à Toulouse"
     print("Sentence:", sentence)
 
     result = extract_stations(sentence)
