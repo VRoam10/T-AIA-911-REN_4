@@ -9,6 +9,7 @@ from typing import Dict, List, Tuple
 
 Graph = Dict[str, List[Tuple[str, float]]]
 
+
 def load_graph(stations_path: str, edges_path: str) -> Graph:
     graph: Graph = {}
 
