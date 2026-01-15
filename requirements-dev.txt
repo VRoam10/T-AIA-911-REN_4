@@ -12,3 +12,6 @@ gradio==6.2.0
 numpy==2.4.0
 sounddevice==0.5.3
 soundfile==0.13.1
+geopy==2.4.1
+spacy==3.8.11
+edsnlp==0.20.0

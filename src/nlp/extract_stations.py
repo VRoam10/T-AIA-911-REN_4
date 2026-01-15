@@ -7,12 +7,12 @@ evaluated (e.g. simple heuristics, pattern-based methods, or more
 advanced techniques).
 """
 
+import csv
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Optional, Tuple
-import csv
-import re
 
 
 @dataclass
