@@ -15,14 +15,14 @@ def main() -> None:
     project_root = Path(__file__).resolve().parent
 
     print("=== Travel Resolver launcher ===")
-    print("1) Mac  (app-mac.py)")
-    print("2) Windows (app.py)")
+    print("1) Mac  (apps/app-mac.py)")
+    print("2) Windows (apps/app.py)")
     choice = input("Choix (1/2, mac/windows) : ").strip().lower()
 
     if choice in {"1", "mac", "m"}:
-        script_name = "app-mac.py"
+        script_name = "apps/app-mac.py"
     elif choice in {"2", "windows", "win", "w"}:
-        script_name = "app.py"
+        script_name = "apps/app.py"
     else:
         print("Choix non reconnu, je pars sur Mac (app-mac.py).")
         script_name = "app-mac.py"
@@ -39,4 +39,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

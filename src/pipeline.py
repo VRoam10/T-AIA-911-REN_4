@@ -13,6 +13,7 @@ modules.
 """
 
 from pathlib import Path
+from typing import Callable, Dict, Tuple
 
 from .graph.dijkstra import dijkstra
 from .graph.load_graph import Graph, load_graph
@@ -27,13 +28,38 @@ STATIONS_CSV = DATA_DIR / "stations.csv"
 EDGES_CSV = DATA_DIR / "edges.csv"
 
 
-def solve_travel_order(sentence: str) -> str:
+# Simple strategy registries so we can swap NLP / path-finding
+StationExtractor = Callable[[str], StationExtractionResult]
+PathFinder = Callable[[Graph, str, str], Tuple[list[str], float]]
+
+NLP_STRATEGIES: Dict[str, StationExtractor] = {
+    "rule_based": extract_stations,
+}
+
+PATH_FINDER_STRATEGIES: Dict[str, PathFinder] = {
+    "dijkstra": dijkstra,
+}
+
+
+def solve_travel_order(
+    sentence: str,
+    nlp_name: str = "rule_based",
+    path_name: str = "dijkstra",
+) -> str:
     """Run the core pipeline on a given sentence and return a message.
 
     This helper is designed to be reused from other front-ends
     (CLI, Gradio app with speech-to-text, tests, etc.).
     """
-    result = extract_stations(sentence)
+    nlp = NLP_STRATEGIES.get(nlp_name)
+    if nlp is None:
+        return f"Unknown NLP strategy: {nlp_name!r}"
+
+    path_finder = PATH_FINDER_STRATEGIES.get(path_name)
+    if path_finder is None:
+        return f"Unknown path-finding strategy: {path_name!r}"
+
+    result = nlp(sentence)
 
     if result.error:
         return f"Extraction error: {result.error}"
@@ -42,7 +68,7 @@ def solve_travel_order(sentence: str) -> str:
     arrival = result.arrival
 
     graph = load_graph(str(STATIONS_CSV), str(EDGES_CSV))
-    path, distance = dijkstra(graph, departure, arrival)
+    path, distance = path_finder(graph, departure, arrival)
 
     if not path:
         return f"No path found between {departure} and {arrival}."
