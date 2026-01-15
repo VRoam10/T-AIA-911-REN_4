@@ -108,7 +108,13 @@ Certains modules (détection d’intention, entrée texte générique, tests aut
 pip install -r requirements-dev.txt
 ```
 
-and install [cuda v12.4](https://developer.nvidia.com/cuda-12-4-1-download-archive) if you have a compatible GPU for faster-whisper
+Install the French spaCy model for text processing:
+
+```bash
+python -m spacy download fr_core_news_md
+```
+
+And install [cuda v12.4](https://developer.nvidia.com/cuda-12-4-1-download-archive) if you have a compatible GPU for faster-whisper
 
 ### 2. Install Pre-commit Hooks
 
