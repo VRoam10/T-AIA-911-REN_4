@@ -24,4 +24,3 @@ def get_input_text() -> str:
     this interface stable.
     """
     raise NotImplementedError("Input acquisition is not implemented yet.")
-

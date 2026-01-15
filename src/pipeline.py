@@ -15,11 +15,11 @@ modules.
 from pathlib import Path
 
 from .graph.dijkstra import dijkstra
-from .graph.load_graph import Graph, load_graph
-from .nlp.extract_stations import StationExtractionResult, extract_stations
+from .graph.load_graph import load_graph
+from .nlp.extract_stations import extract_stations
+
 # from .nlp.intent import Intent, detect_intent
 # from .io.input_text import get_input_text
-
 
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -39,7 +39,7 @@ def run_pipeline() -> None:
 
     result = extract_stations(sentence)
 
-    if result.error:
+    if result.error or not result.departure or not result.arrival:
         print("Extraction error:", result.error)
         return
 
@@ -51,16 +51,14 @@ def run_pipeline() -> None:
 
     graph = load_graph(str(STATIONS_CSV), str(EDGES_CSV))
 
-
     path, distance = dijkstra(graph, departure, arrival)
 
     if not path:
         print("No path found.")
         return
-    
+
     print("Shortest path:", " -> ".join(path))
     print("Total distance:", distance, "km")
-
 
 
 if __name__ == "__main__":

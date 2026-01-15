@@ -38,4 +38,3 @@ def detect_intent(sentence: str) -> Intent:
     or other NLP techniques) will be implemented later.
     """
     raise NotImplementedError("Intent detection is not implemented yet.")
-
