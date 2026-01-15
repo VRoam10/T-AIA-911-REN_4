@@ -3,11 +3,18 @@ import queue
 import tempfile
 import threading
 import time
+from pathlib import Path
 
 import gradio as gr
 import numpy as np
 import sounddevice as sd
 from faster_whisper import WhisperModel
+
+import sys
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from src.pipeline import solve_travel_order
 
