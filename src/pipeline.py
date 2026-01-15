@@ -16,11 +16,11 @@ from pathlib import Path
 from typing import Callable, Dict, Tuple
 
 from .graph.dijkstra import dijkstra
-from .graph.load_graph import Graph, load_graph
-from .nlp.extract_stations import StationExtractionResult, extract_stations
+from .graph.load_graph import load_graph
+from .nlp.extract_stations import extract_stations
+
 # from .nlp.intent import Intent, detect_intent
 # from .io.input_text import get_input_text
-
 
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -88,7 +88,6 @@ def run_pipeline() -> None:
 
     message = solve_travel_order(sentence)
     print(message)
-
 
 
 if __name__ == "__main__":
