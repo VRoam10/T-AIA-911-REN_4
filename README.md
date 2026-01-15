@@ -14,9 +14,6 @@ Le projet fonctionne entièrement hors‑ligne et sert de baseline pour explorer
 À partir d’une phrase simple comme :
 
 > Je veux aller de Paris à Marseille
-and install [cuda v12.4](https://developer.nvidia.com/cuda-12-4-1-download-archive) if you have a compatible GPU for faster-whisper
-
-### 2. Install Pre-commit Hooks
 
 le pipeline actuel :
 
@@ -24,10 +21,6 @@ le pipeline actuel :
 2. charge un graphe de transport fictif à partir de fichiers CSV ;
 3. calcule le plus court chemin entre les deux gares avec Dijkstra ;
 4. affiche le trajet et la distance totale.
-This installs two types of hooks:
-
-- **pre-commit**: Runs linters/formatters before each commit
-- **commit-msg**: Validates commit messages follow conventional commit format
 
 Le but est pédagogique : poser une architecture propre et extensible, puis améliorer progressivement la partie NLP.
 
@@ -52,6 +45,108 @@ Le dossier `data/` contient les fichiers CSV utilisés par le pipeline :
 
 - `data/stations.csv` : liste de gares fictives (identifiant de gare et nom de ville) ;
 - `data/edges.csv` : liste d’arêtes entre gares avec une distance (poids).
+
+Ces données :
+
+- sont entièrement **fictives** ;
+- servent uniquement à vérifier que le pipeline de base fonctionne ;
+- pourront être remplacées plus tard par un jeu de données plus riche ou plus réaliste.
+
+## Lancer la pipeline
+
+### Prérequis
+
+- Python **3.11** ou version supérieure.
+
+Aucune dépendance externe n’est nécessaire : le projet utilise uniquement la bibliothèque standard de Python.
+
+### Commande
+
+Depuis la racine du projet (`T-AIA-911-REN_4`), exécuter :
+
+```bash
+python -m src.pipeline
+```
+
+Cela lance le pipeline de démonstration avec la phrase d’exemple intégrée dans `src/pipeline.py`.
+
+## Exemple de sortie
+
+Pour la phrase :
+
+> Je veux aller de Paris à Marseille
+
+une exécution typique donne :
+
+```text
+Sentence: Je veux aller de Paris à Marseille
+Departure: PAR
+Arrival: MAR
+Shortest path: PAR -> DIJ -> LYO -> MAR
+Total distance: 835.0 km
+```
+
+Les valeurs exactes dépendent uniquement des fichiers CSV fournis dans `data/`, qui sont conçus pour valider ce scénario de base.
+
+## État actuel du projet
+
+À ce stade :
+
+- le **pipeline baseline** est fonctionnel (chargement du graphe, extraction de gares sur phrases simples, calcul du plus court chemin) ;
+- la partie **NLP** est volontairement simple et **basée sur des règles** :
+  - recherche de noms de villes connus dans la phrase ;
+  - première ville trouvée = départ, deuxième ville = arrivée ;
+- l’objectif est d’**améliorer progressivement le NLP** et de **comparer plusieurs approches** (règles, modèles plus avancés, etc.), tout en gardant la même interface.
+
+Certains modules (détection d’intention, entrée texte générique, tests automatisés) sont encore à l’état de squelette et seront complétés dans les étapes suivantes du projet.
+
+## Quick Setup
+
+### 1. Install Dependencies
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+and install [cuda v12.4](https://developer.nvidia.com/cuda-12-4-1-download-archive) if you have a compatible GPU for faster-whisper
+
+### 2. Install Pre-commit Hooks
+
+```bash
+pre-commit install --hook-type commit-msg --hook-type pre-commit
+```
+
+This installs two types of hooks:
+
+- **pre-commit**: Runs linters/formatters before each commit
+- **commit-msg**: Validates commit messages follow conventional commit format
+
+### 3. Make Your First Commit
+
+Use commitizen for interactive commit messages:
+
+```bash
+cz commit
+```
+
+Or write conventional commits manually:
+
+```bash
+git commit -m "feat: add new feature"
+git commit -m "fix: resolve bug in module"
+git commit -m "docs: update README"
+```
+
+## Conventional Commit Format
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
 **Types:**
 
 - `feat`: New feature
@@ -72,47 +167,48 @@ fix(api): resolve timeout issue
 docs: update installation guide
 ```
 
-Ces données :
+## Linting Tools
 
-- sont entièrement **fictives** ;
-- servent uniquement à vérifier que le pipeline de base fonctionne ;
-- pourront être remplacées plus tard par un jeu de données plus riche ou plus réaliste.
 ### Black (Code Formatter)
 
 Automatically formats your code to conform to PEP 8.
 
-## Lancer le pipeline
+```bash
+black .
+```
 
-### Prérequis
 ### isort (Import Sorter)
 
 Sorts and organizes imports.
 
-- Python **3.9** ou version supérieure.
+```bash
+isort .
+```
 
-Aucune dépendance externe n’est nécessaire : le projet utilise uniquement la bibliothèque standard de Python.
 ### flake8 (Linter)
 
 Checks code for style issues and errors.
 
-### Commande
+```bash
+flake8 .
+```
 
-Depuis la racine du projet (`T-AIA-911-REN_4`), exécuter :
 ### mypy (Type Checker)
 
 Performs static type checking.
 
 ```bash
-python -m src.pipeline
+mypy .
 ```
 
-Cela lance le pipeline de démonstration avec la phrase d’exemple intégrée dans `src/pipeline.py`.
+### Run All Checks Manually
 
-## Exemple de sortie
+```bash
+pre-commit run --all-files
+```
 
-Pour la phrase :
+## GitHub Actions Workflow
 
-> Je veux aller de Paris à Marseille
 The `.github/workflows/lint.yml` workflow runs automatically on:
 
 - Pull requests to `main` or `develop`
@@ -126,21 +222,23 @@ It checks:
 - Type checking (mypy)
 - Tests (pytest, if tests exist)
 
-une exécution typique donne :
+## Project Structure
 
-```text
-Sentence: Je veux aller de Paris à Marseille
-Departure: PAR
-Arrival: MAR
-Shortest path: PAR -> DIJ -> LYO -> MAR
-Total distance: 835.0 km
+```
+your-project/
+├── .github/
+│   └── workflows/
+│       └── lint.yml          # CI/CD workflow
+├── src/                       # Source code
+├── tests/                     # Test files
+├── .pre-commit-config.yaml   # Pre-commit configuration
+├── pyproject.toml            # Project configuration
+├── requirements.txt          # Production dependencies
+└── requirements-dev.txt      # Development dependencies
 ```
 
-Les valeurs exactes dépendent uniquement des fichiers CSV fournis dans `data/`, qui sont conçus pour valider ce scénario de base.
+## Tips
 
-## État actuel du projet
-
-À ce stade :
 1. **Bypass hooks** (not recommended):
 
    ```bash
@@ -160,13 +258,10 @@ Les valeurs exactes dépendent uniquement des fichiers CSV fournis dans `data/`,
    exclude: ^(path/to/file\.py|another/file\.py)$
    ```
 
-- le **pipeline baseline** est fonctionnel (chargement du graphe, extraction de gares sur phrases simples, calcul du plus court chemin) ;
-- la partie **NLP** est volontairement simple et **basée sur des règles** :
-  - recherche de noms de villes connus dans la phrase ;
-  - première ville trouvée = départ, deuxième ville = arrivée ;
-- l’objectif est d’**améliorer progressivement le NLP** et de **comparer plusieurs approches** (règles, modèles plus avancés, etc.), tout en gardant la même interface.
+4. **Configure in IDE**:
+   - VS Code: Install Python, Black, and isort extensions
+   - PyCharm: Enable Black and configure in Settings → Tools
 
-Certains modules (détection d’intention, entrée texte générique, tests automatisés) sont encore à l’état de squelette et seront complétés dans les étapes suivantes du projet.
 ## Troubleshooting
 
 **Hook installation failed:**
@@ -175,5 +270,3 @@ Certains modules (détection d’intention, entrée texte générique, tests aut
 pre-commit clean
 pre-commit install --hook-type commit-msg --hook-type pre-commit
 ```
-
-
