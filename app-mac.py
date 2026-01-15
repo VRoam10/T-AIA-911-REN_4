@@ -1,22 +1,22 @@
 import os
-import queue
 import tempfile
-import threading
-import time
-
 import gradio as gr
+from faster_whisper import WhisperModel
+
 import numpy as np
 import sounddevice as sd
-from faster_whisper import WhisperModel
+import queue
+import threading
+import time
 
 from src.pipeline import solve_travel_order
 
 # ============================
 # CONFIG
 # ============================
-MODEL_SIZE = "small"  # small / medium / large-v3
-DEVICE = "cuda"  # cuda or cpu
-COMPUTE_TYPE = "float16"  # float16 (GPU) or int8 (CPU)
+MODEL_SIZE = "small"          # small / medium / large-v3
+DEVICE = "cuda"               # cuda or cpu
+COMPUTE_TYPE = "float16"      # float16 (GPU) or int8 (CPU)
 
 SAMPLE_RATE = 16000
 BUFFER_SECONDS = 5
@@ -28,11 +28,19 @@ STEP_SECONDS = 1.5
 print("🔄 Loading Whisper model...")
 
 try:
-    model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
+    model = WhisperModel(
+        MODEL_SIZE,
+        device=DEVICE,
+        compute_type=COMPUTE_TYPE
+    )
     print("✅ GPU model loaded")
 except Exception as e:
     print("⚠️ GPU failed, fallback to CPU:", e)
-    model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
+    model = WhisperModel(
+        MODEL_SIZE,
+        device="cpu",
+        compute_type="int8"
+    )
 
 # ============================
 # HELPERS
@@ -53,7 +61,9 @@ def write_srt(segments):
     out = []
     for i, seg in enumerate(segments, 1):
         out.append(str(i))
-        out.append(f"{format_ts(seg['start'])} --> {format_ts(seg['end'])}")
+        out.append(
+            f"{format_ts(seg['start'])} --> {format_ts(seg['end'])}"
+        )
         out.append(seg["text"].strip())
         out.append("")
     return "\n".join(out)
@@ -62,11 +72,12 @@ def write_srt(segments):
 def write_vtt(segments):
     out = ["WEBVTT\n"]
     for seg in segments:
-        out.append(f"{format_ts(seg['start'], True)} --> {format_ts(seg['end'], True)}")
+        out.append(
+            f"{format_ts(seg['start'], True)} --> {format_ts(seg['end'], True)}"
+        )
         out.append(seg["text"].strip())
         out.append("")
     return "\n".join(out)
-
 
 # ============================
 # FILE TRANSCRIPTION
@@ -79,17 +90,21 @@ def transcribe_file(audio_path):
 
     segments_gen, info = model.transcribe(
         audio_path,
-        language=None,  # auto language detection
+        language=None,                 # auto language detection
         vad_filter=True,
         vad_parameters=dict(min_silence_duration_ms=300),
-        word_timestamps=True,
+        word_timestamps=True
     )
 
     segments = []
     full_text = ""
 
     for seg in segments_gen:
-        segments.append({"start": seg.start, "end": seg.end, "text": seg.text})
+        segments.append({
+            "start": seg.start,
+            "end": seg.end,
+            "text": seg.text
+        })
         full_text += seg.text + " "
 
     tmp = tempfile.mkdtemp()
@@ -107,9 +122,7 @@ def transcribe_file(audio_path):
     with open(vtt_path, "w", encoding="utf-8") as f:
         f.write(write_vtt(segments))
 
-    header = (
-        f"🌍 Langue détectée: {info.language} ({info.language_probability:.2f})\n\n"
-    )
+    header = f"🌍 Langue détectée: {info.language} ({info.language_probability:.2f})\n\n"
     analysis = solve_travel_order(full_text.strip())
     combined_text = header + full_text.strip() + "\n\n" + analysis
     return combined_text, txt_path, srt_path, vtt_path
@@ -118,7 +131,7 @@ def transcribe_file(audio_path):
 # ============================
 # LIVE MICROPHONE
 # ============================
-audio_queue: queue.Queue = queue.Queue()
+audio_queue = queue.Queue()
 stop_event = threading.Event()
 
 
@@ -134,7 +147,10 @@ def live_transcribe():
     last_text = ""
 
     with sd.InputStream(
-        samplerate=SAMPLE_RATE, channels=1, dtype="float32", callback=audio_callback
+        samplerate=SAMPLE_RATE,
+        channels=1,
+        dtype="float32",
+        callback=audio_callback
     ):
         while not stop_event.is_set():
             try:
@@ -147,7 +163,9 @@ def live_transcribe():
 
                 if len(buffer) >= SAMPLE_RATE * STEP_SECONDS:
                     segments, info = model.transcribe(
-                        buffer.flatten(), language=None, vad_filter=True
+                        buffer.flatten(),
+                        language=None,
+                        vad_filter=True
                     )
 
                     text = ""
@@ -175,21 +193,19 @@ def stop_live():
 # UI
 # ============================
 with gr.Blocks(title="Whisper • GPU • Live • SRT/VTT") as app:
-    gr.Markdown(
-        """
+    gr.Markdown("""
 # 🎤 Whisper — Fast • GPU • Live
 
 ### 📂 Fichier audio
-✔ Auto langue
-✔ VAD
-✔ TXT / SRT / VTT
+✔ Auto langue  
+✔ VAD  
+✔ TXT / SRT / VTT  
 
 ### 🎙️ Micro en direct
-✔ Buffer circulaire
-✔ Quasi temps réel
-✔ GPU / CPU fallback
-"""
-    )
+✔ Buffer circulaire  
+✔ Quasi temps réel  
+✔ GPU / CPU fallback  
+""")
 
     # ---- File mode
     audio_file = gr.Audio(type="filepath", label="🎧 Audio file")
@@ -214,4 +230,15 @@ with gr.Blocks(title="Whisper • GPU • Live • SRT/VTT") as app:
     start_btn.click(live_transcribe, outputs=live_output)
     stop_btn.click(stop_live, outputs=live_output)
 
-app.launch()
+# Work around Gradio api_info JSON schema bug
+try:
+    import gradio.routes as gr_routes
+
+    def _safe_api_info(_serialize: bool = False):
+        return {}
+
+    gr_routes.api_info = _safe_api_info
+except Exception:
+    pass
+
+app.launch(share=True)

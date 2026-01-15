@@ -27,39 +27,41 @@ STATIONS_CSV = DATA_DIR / "stations.csv"
 EDGES_CSV = DATA_DIR / "edges.csv"
 
 
+def solve_travel_order(sentence: str) -> str:
+    """Run the core pipeline on a given sentence and return a message.
+
+    This helper is designed to be reused from other front-ends
+    (CLI, Gradio app with speech-to-text, tests, etc.).
+    """
+    result = extract_stations(sentence)
+
+    if result.error:
+        return f"Extraction error: {result.error}"
+
+    departure = result.departure
+    arrival = result.arrival
+
+    graph = load_graph(str(STATIONS_CSV), str(EDGES_CSV))
+    path, distance = dijkstra(graph, departure, arrival)
+
+    if not path:
+        return f"No path found between {departure} and {arrival}."
+
+    path_str = " -> ".join(path)
+    return f"Shortest path: {path_str}\nTotal distance: {distance} km"
+
+
 def run_pipeline() -> None:
     """Run the end-to-end processing pipeline for a single input.
 
     The function defines the high-level orchestration of the project
     without providing the concrete implementations of each step.
     """
-
     sentence = "Je veux aller de Rennes à Toulouse"
     print("Sentence:", sentence)
 
-    result = extract_stations(sentence)
-
-    if result.error:
-        print("Extraction error:", result.error)
-        return
-
-    departure = result.departure
-    arrival = result.arrival
-
-    print("Departure:", departure)
-    print("Arrival:", arrival)
-
-    graph = load_graph(str(STATIONS_CSV), str(EDGES_CSV))
-
-
-    path, distance = dijkstra(graph, departure, arrival)
-
-    if not path:
-        print("No path found.")
-        return
-    
-    print("Shortest path:", " -> ".join(path))
-    print("Total distance:", distance, "km")
+    message = solve_travel_order(sentence)
+    print(message)
 
 
 
