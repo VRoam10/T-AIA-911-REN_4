@@ -13,6 +13,7 @@ modules.
 """
 
 from pathlib import Path
+from typing import Callable, Dict, Tuple
 
 from .graph.dijkstra import dijkstra
 from .graph.load_graph import load_graph
@@ -27,38 +28,66 @@ STATIONS_CSV = DATA_DIR / "stations.csv"
 EDGES_CSV = DATA_DIR / "edges.csv"
 
 
+# Simple strategy registries so we can swap NLP / path-finding
+StationExtractor = Callable[[str], StationExtractionResult]
+PathFinder = Callable[[Graph, str, str], Tuple[list[str], float]]
+
+NLP_STRATEGIES: Dict[str, StationExtractor] = {
+    "rule_based": extract_stations,
+}
+
+PATH_FINDER_STRATEGIES: Dict[str, PathFinder] = {
+    "dijkstra": dijkstra,
+}
+
+
+def solve_travel_order(
+    sentence: str,
+    nlp_name: str = "rule_based",
+    path_name: str = "dijkstra",
+) -> str:
+    """Run the core pipeline on a given sentence and return a message.
+
+    This helper is designed to be reused from other front-ends
+    (CLI, Gradio app with speech-to-text, tests, etc.).
+    """
+    nlp = NLP_STRATEGIES.get(nlp_name)
+    if nlp is None:
+        return f"Unknown NLP strategy: {nlp_name!r}"
+
+    path_finder = PATH_FINDER_STRATEGIES.get(path_name)
+    if path_finder is None:
+        return f"Unknown path-finding strategy: {path_name!r}"
+
+    result = nlp(sentence)
+
+    if result.error:
+        return f"Extraction error: {result.error}"
+
+    departure = result.departure
+    arrival = result.arrival
+
+    graph = load_graph(str(STATIONS_CSV), str(EDGES_CSV))
+    path, distance = path_finder(graph, departure, arrival)
+
+    if not path:
+        return f"No path found between {departure} and {arrival}."
+
+    path_str = " -> ".join(path)
+    return f"Shortest path: {path_str}\nTotal distance: {distance} km"
+
+
 def run_pipeline() -> None:
     """Run the end-to-end processing pipeline for a single input.
 
     The function defines the high-level orchestration of the project
     without providing the concrete implementations of each step.
     """
-
     sentence = "Je veux aller de Rennes à Toulouse"
     print("Sentence:", sentence)
 
-    result = extract_stations(sentence)
-
-    if result.error or not result.departure or not result.arrival:
-        print("Extraction error:", result.error)
-        return
-
-    departure = result.departure
-    arrival = result.arrival
-
-    print("Departure:", departure)
-    print("Arrival:", arrival)
-
-    graph = load_graph(str(STATIONS_CSV), str(EDGES_CSV))
-
-    path, distance = dijkstra(graph, departure, arrival)
-
-    if not path:
-        print("No path found.")
-        return
-
-    print("Shortest path:", " -> ".join(path))
-    print("Total distance:", distance, "km")
+    message = solve_travel_order(sentence)
+    print(message)
 
 
 if __name__ == "__main__":
