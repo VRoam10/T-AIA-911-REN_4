@@ -25,4 +25,3 @@ def test_extract_stations_unknown_city():
 
     assert result.departure is None or result.arrival is None
     assert result.error == "Could not detect both departure and arrival stations."
-

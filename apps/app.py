@@ -1,6 +1,5 @@
 import gradio as gr
 from faster_whisper import WhisperModel
-
 from utils import (
     extract_departure_and_destinations,
     extract_locations,
