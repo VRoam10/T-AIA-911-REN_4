@@ -18,9 +18,7 @@ from typing import Callable, Dict, Tuple
 from .graph.dijkstra import dijkstra
 from .graph.load_graph import Graph, load_graph
 from .nlp.extract_stations import StationExtractionResult, extract_stations
-
-# from .nlp.intent import Intent, detect_intent
-# from .io.input_text import get_input_text
+from .nlp.intent import Intent, detect_intent
 
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -51,6 +49,17 @@ def solve_travel_order(
     This helper is designed to be reused from other front-ends
     (CLI, Gradio app with speech-to-text, tests, etc.).
     """
+    # Step 1: Detect intent first
+    intent = detect_intent(sentence)
+
+    if intent == Intent.UNKNOWN:
+        return "Error: Empty or invalid input"
+    elif intent == Intent.NOT_FRENCH:
+        return "Error: Input is not in French"
+    elif intent == Intent.NOT_TRIP:
+        return "Error: Input is not a travel request"
+
+    # Step 2: If intent is TRIP, proceed with NLP extraction
     nlp = NLP_STRATEGIES.get(nlp_name)
     if nlp is None:
         return f"Unknown NLP strategy: {nlp_name!r}"

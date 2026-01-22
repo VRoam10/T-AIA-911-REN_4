@@ -1,3 +1,9 @@
+import sys
+import os
+
+# Add parent directory to path to import from src
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import gradio as gr
 from faster_whisper import WhisperModel
 from utils import (
@@ -6,6 +12,8 @@ from utils import (
     extract_valid_cities,
     format_ts,
 )
+from src.pipeline import solve_travel_order
+from src.nlp.intent import detect_intent, Intent
 
 # ============================ CONFIG ============================
 MODEL_SIZE = "small"  # small / medium / large-v3
@@ -33,16 +41,30 @@ def transcribe_file(audio_path: str) -> str:
         vad_parameters=dict(min_silence_duration_ms=300),
     )
 
+    # Convert generator to list to be able to iterate multiple times
+    segments = list(segments_gen)
+
     output = [
         f"{format_ts(seg.start)} --> {format_ts(seg.end)}\n{seg.text.strip()}\n"
-        for seg in segments_gen
+        for seg in segments
     ]
 
     full_text = "\n".join(output)
 
+    # Extract plain text without timestamps for intent detection
+    plain_text = " ".join([seg.text.strip() for seg in segments])
+
     header = (
         f"🌍 Langue détectée: {info.language} ({info.language_probability:.2f})\n\n"
     )
+
+    # Detect intent and compute route if applicable
+    intent = detect_intent(plain_text)
+    header += f"🤖 Intent détecté: {intent.name}\n\n"
+
+    if intent == Intent.TRIP:
+        route_result = solve_travel_order(plain_text)
+        header += f"🚆 {route_result}\n\n"
 
     locations = extract_locations(full_text)
     valid_cities = extract_valid_cities(locations)
