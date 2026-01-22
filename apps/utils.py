@@ -1,3 +1,5 @@
+from typing import Any, Dict
+
 import spacy
 from geopy.extra.rate_limiter import RateLimiter
 from geopy.geocoders import Nominatim
@@ -75,7 +77,11 @@ def extract_departure_and_destinations(text: str, cities: list[dict]) -> dict:
     Retourne départ, destinations multiples (ordre texte) et dates détectées
     """
     lowered = text.lower()
-    route = {"depart": None, "destinations": [], "dates": extract_dates(text)}
+    route: Dict[str, Any] = {
+        "depart": None,
+        "destinations": [],
+        "dates": extract_dates(text),
+    }
 
     city_positions = []
     for city in cities:

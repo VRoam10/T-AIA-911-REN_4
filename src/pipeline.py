@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Callable, Dict, Tuple
 
 from .graph.dijkstra import dijkstra
-from .graph.load_graph import load_graph
-from .nlp.extract_stations import extract_stations
+from .graph.load_graph import Graph, load_graph
+from .nlp.extract_stations import StationExtractionResult, extract_stations
 
 # from .nlp.intent import Intent, detect_intent
 # from .io.input_text import get_input_text
@@ -63,6 +63,9 @@ def solve_travel_order(
 
     if result.error:
         return f"Extraction error: {result.error}"
+
+    if result.departure is None or result.arrival is None:
+        raise ValueError("Departure or arrival not set")
 
     departure = result.departure
     arrival = result.arrival

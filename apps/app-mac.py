@@ -124,7 +124,7 @@ def transcribe_file(audio_path):
 # ============================
 # LIVE MICROPHONE
 # ============================
-audio_queue = queue.Queue()
+audio_queue: queue.Queue = queue.Queue()
 stop_event = threading.Event()
 
 
@@ -227,7 +227,10 @@ try:
     def _safe_api_info(_serialize: bool = False):
         return {}
 
-    gr_routes.api_info = _safe_api_info
+    if hasattr(gr_routes, "api_info"):
+        gr_routes.api_info = _safe_api_info
+    else:
+        setattr(gr_routes, "api_info", _safe_api_info)
 except Exception:
     pass
 

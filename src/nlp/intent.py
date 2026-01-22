@@ -133,11 +133,11 @@ def _is_french(text: str, min_confidence: float = 0.8) -> bool:
             if len(text) < 15:
                 extended_text = f"{text} {text} {text}"
                 lang = detect(extended_text)
-                return lang == "fr"
+                return bool(lang == "fr")
 
             # For longer texts, use direct detection
             lang = detect(text)
-            return lang == "fr"
+            return bool(lang == "fr")
         except (LangDetectException, Exception):
             pass
 
