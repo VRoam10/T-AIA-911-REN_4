@@ -65,6 +65,14 @@ def transcribe_file(audio_path: str) -> str:
     if intent == Intent.TRIP:
         route_result = solve_travel_order(plain_text)
         header += f"🚆 {route_result}\n\n"
+    elif intent == Intent.NOT_FRENCH:
+        header += "❌ Désolé, je ne traite que les demandes en français.\n\n"
+    elif intent == Intent.NOT_TRIP:
+        header += "❌ Désolé, votre demande n'est pas une demande de voyage.\n"
+        header += "   Essayez : 'Je veux aller de Paris à Lyon'\n\n"
+    elif intent == Intent.UNKNOWN:
+        header += "❌ Désolé, je n'ai pas compris votre demande.\n"
+        header += "   Assurez-vous que votre message n'est pas vide.\n\n"
 
     locations = extract_locations(full_text)
     valid_cities = extract_valid_cities(locations)
