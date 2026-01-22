@@ -1,0 +1,23 @@
+structure_id,template,expects_results
+1,"Je voudrais aller de {DEP} à {ARR}",CORRECT
+2,"Billet {DEP} {ARR}",CORRECT
+3,"Un train partant de {DEP} pour {ARR}",CORRECT
+4,"Comment aller à {ARR} depuis {DEP} ?",CORRECT
+5,"Je veux aller à {ARR}",NOT_TRIP
+6,"Quel est le prix d’un billet ?",NOT_TRIP
+7,"Je voyage demain",NOT_TRIP
+8,"Départ {DEP}",NOT_TRIP
+9,"{DEP} vers {ARR} en train",CORRECT
+10,"train {DEP} vers {ARR}",CORRECT
+11,"Je cherche un train pour {ARR}",NOT_TRIP
+12,"Horaires de train de {DEP} à {ARR}",CORRECT
+13,"Prochain train de {DEP} à {ARR}",CORRECT
+14,"Je vais voir un ami à {ARR}",NOT_TRIP
+15,"I need to go {ARR} from {DEP}",NOT_FRENCH
+16,"De {DEP} à {ARR}",CORRECT
+17,"Comment aller de {DEP} à {ARR} ?",CORRECT
+18,"Je veux aller de {DEP} à {ARR}",CORRECT
+19,"Itinéraire entre {DEP} et {ARR}",CORRECT
+20,"Trajet {DEP} - {ARR}",CORRECT
+21,"Partir de {DEP} pour aller à {ARR}",CORRECT
+22,"Depuis {DEP} jusqu'à {ARR}",CORRECT
