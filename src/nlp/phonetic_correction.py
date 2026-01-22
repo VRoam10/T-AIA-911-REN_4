@@ -2,7 +2,8 @@
 
 This module corrects common transcription errors from Whisper STT
 when users say city names that are transcribed incorrectly due to
-phonetic similarity. It uses context to avoid false corrections.
+phonetic similarity. Uses rapidfuzz for intelligent fuzzy matching
+instead of manual dictionaries.
 
 Example
 -------
@@ -12,8 +13,12 @@ Example
     "La reine de France"  # No correction (wrong context)
 """
 
+import csv
 import re
-from typing import Dict
+from pathlib import Path
+from typing import List, Optional
+
+from rapidfuzz import fuzz, process
 
 # Travel context keywords that indicate we're talking about a journey
 TRAVEL_KEYWORDS = [
@@ -47,43 +52,66 @@ LOCATION_PREPOSITIONS = [
     "en direction de",
 ]
 
-# Mapping of phonetic errors to correct city names
-PHONETIC_CORRECTIONS: Dict[str, str] = {
-    # Rennes variations
-    "reine": "Rennes",
-    "rêne": "Rennes",
-    "rènes": "Rennes",
-    "rênes": "Rennes",
-    # Lyon variations
-    "lion": "Lyon",
-    "lions": "Lyon",
-    # Paris variations
-    "pari": "Paris",
-    # Marseille variations
-    "marseye": "Marseille",
-    "marsey": "Marseille",
-    # Toulouse variations
-    "toulouze": "Toulouse",
-    # Bordeaux variations
-    "bordo": "Bordeaux",
-    # Nice variations
-    "niece": "Nice",
-    "nisse": "Nice",
-    # Lille variations
-    "lil": "Lille",
-    # Nantes variations
-    "nante": "Nantes",
-    # Strasbourg variations
-    "strasbour": "Strasbourg",
-    # Montpellier variations
-    "montpelier": "Montpellier",
-    "montpelié": "Montpellier",
-    # Dijon variations
-    "djon": "Dijon",
-    # Reims variations
-    "reim": "Reims",
-    "rains": "Reims",
-}
+# Minimum similarity score (0-100) to consider a match
+MIN_SIMILARITY_SCORE = 70
+
+# Cache for city names loaded from CSV
+_CITY_NAMES: Optional[List[str]] = None
+
+
+def _load_city_names() -> List[str]:
+    """Load city names from stations.csv.
+
+    Returns
+    -------
+    List[str]
+        List of city names
+    """
+    global _CITY_NAMES
+
+    if _CITY_NAMES is not None:
+        return _CITY_NAMES
+
+    # Get path to stations.csv
+    current_file = Path(__file__).resolve()
+    data_dir = current_file.parent.parent.parent / "data"
+    stations_csv = data_dir / "stations.csv"
+
+    cities = []
+    try:
+        with open(stations_csv, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if "station_name" in row and row["station_name"]:
+                    cities.append(row["station_name"])
+    except Exception as e:
+        print(f"Warning: Could not load stations.csv: {e}")
+        # Fallback to common cities if CSV loading fails
+        cities = [
+            "Paris",
+            "Lyon",
+            "Marseille",
+            "Toulouse",
+            "Nice",
+            "Nantes",
+            "Strasbourg",
+            "Montpellier",
+            "Bordeaux",
+            "Lille",
+            "Rennes",
+            "Reims",
+            "Le Havre",
+            "Saint-Étienne",
+            "Toulon",
+            "Grenoble",
+            "Dijon",
+            "Angers",
+            "Nîmes",
+            "Villeurbanne",
+        ]
+
+    _CITY_NAMES = cities
+    return cities
 
 
 def _has_travel_context(text: str) -> bool:
@@ -103,29 +131,43 @@ def _has_travel_context(text: str) -> bool:
     return any(keyword in text_lower for keyword in TRAVEL_KEYWORDS)
 
 
-def _has_location_preposition_before(text: str, word_pos: int) -> bool:
-    """Check if there's a location preposition before the word.
+def _find_closest_city(word: str) -> Optional[str]:
+    """Find the closest city name using fuzzy matching.
 
     Parameters
     ----------
-    text : str
-        The full text
-    word_pos : int
-        Position of the word in the text
+    word : str
+        The word to match
 
     Returns
     -------
-    bool
-        True if a location preposition is found nearby
+    Optional[str]
+        City name if match found, None otherwise
     """
-    # Get text before the word (up to 20 characters back)
-    before_text = text[max(0, word_pos - 20) : word_pos].lower()
+    cities = _load_city_names()
 
-    return any(prep in before_text for prep in LOCATION_PREPOSITIONS)
+    # Normalize to lowercase for comparison, but return original city name
+    word_lower = word.lower()
+
+    # Use rapidfuzz to find the best match (case-insensitive)
+    result = process.extractOne(
+        word_lower,
+        [city.lower() for city in cities],
+        scorer=fuzz.ratio,
+        score_cutoff=MIN_SIMILARITY_SCORE,
+    )
+
+    if result:
+        # Find the original city name (with proper capitalization)
+        matched_lower = result[0]
+        for city in cities:
+            if city.lower() == matched_lower:
+                return city
+    return None
 
 
 def correct_city_names(text: str) -> str:
-    """Correct common phonetic errors in city names using context.
+    """Correct common phonetic errors in city names using fuzzy matching.
 
     Only corrects if the text has travel context or location prepositions.
 
@@ -142,49 +184,44 @@ def correct_city_names(text: str) -> str:
     # First check if we have travel context
     has_context = _has_travel_context(text)
 
+    # If no travel context, return original text
+    if not has_context:
+        return text
+
     corrected = text
+    words = re.findall(r"\b\w+\b", text)
 
-    # Apply corrections with context awareness
-    for wrong, correct in PHONETIC_CORRECTIONS.items():
-        # Find all occurrences of the wrong word
+    # Track corrections to avoid multiple passes
+    corrections = {}
+
+    for word in words:
+        # Skip very short words (less than 3 characters)
+        if len(word) < 3:
+            continue
+
+        # Check if this word is close to a city name
+        city_name = _find_closest_city(word)
+
+        if city_name:
+            # Only correct if it's not already the correct city name
+            if word.lower() != city_name.lower():
+                corrections[word] = city_name
+
+    # Apply corrections
+    for wrong, correct in corrections.items():
+        # Use word boundaries to avoid partial replacements
         pattern = r"\b" + re.escape(wrong) + r"\b"
-
-        # Process matches in reverse order to maintain positions
-        matches = list(re.finditer(pattern, corrected, flags=re.IGNORECASE))
-        for match in reversed(matches):
-            word_pos = match.start()
-
-            # Decide if we should correct based on context
-            should_correct = has_context or _has_location_preposition_before(
-                corrected, word_pos
-            )
-
-            if should_correct:
-                # Replace this occurrence
-                corrected = corrected[:word_pos] + correct + corrected[match.end() :]
+        corrected = re.sub(pattern, correct, corrected, flags=re.IGNORECASE)
 
     return corrected
 
 
-def add_correction(wrong: str, correct: str) -> None:
-    """Add a new phonetic correction to the mapping.
-
-    Parameters
-    ----------
-    wrong : str
-        The incorrect transcription
-    correct : str
-        The correct city name
-    """
-    PHONETIC_CORRECTIONS[wrong.lower()] = correct
-
-
-def get_corrections() -> Dict[str, str]:
-    """Get all available phonetic corrections.
+def get_city_names() -> List[str]:
+    """Get all available city names.
 
     Returns
     -------
-    Dict[str, str]
-        Dictionary of incorrect -> correct mappings
+    List[str]
+        List of city names from stations.csv
     """
-    return PHONETIC_CORRECTIONS.copy()
+    return _load_city_names().copy()
