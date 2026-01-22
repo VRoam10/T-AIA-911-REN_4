@@ -84,7 +84,7 @@ def transcribe_file(audio_path: str) -> str:
         header += "❌ Désolé, je n'ai pas compris votre demande.\n"
         header += "   Assurez-vous que votre message n'est pas vide.\n\n"
 
-    locations = extract_locations(full_text)
+    locations = extract_locations(corrected_text)
     valid_cities = extract_valid_cities(locations)
 
     if valid_cities:
@@ -97,7 +97,7 @@ def transcribe_file(audio_path: str) -> str:
                 header += f"    {k}: {v}\n"
         header += "\n"
 
-    route_info = extract_departure_and_destinations(full_text, valid_cities)
+    route_info = extract_departure_and_destinations(corrected_text, valid_cities)
 
     if route_info["depart"] or route_info["destinations"]:
         header += "🧭 Itinéraire :\n"
