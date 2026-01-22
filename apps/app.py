@@ -14,6 +14,7 @@ from utils import (
 )
 from src.pipeline import solve_travel_order
 from src.nlp.intent import detect_intent, Intent
+from src.nlp.phonetic_correction import correct_city_names
 
 # ============================ CONFIG ============================
 MODEL_SIZE = "small"  # small / medium / large-v3
@@ -54,16 +55,25 @@ def transcribe_file(audio_path: str) -> str:
     # Extract plain text without timestamps for intent detection
     plain_text = " ".join([seg.text.strip() for seg in segments])
 
+    # Apply phonetic correction for city names
+    corrected_text = correct_city_names(plain_text)
+
     header = (
         f"🌍 Langue détectée: {info.language} ({info.language_probability:.2f})\n\n"
     )
 
+    # Show correction if text was changed
+    if corrected_text != plain_text:
+        header += f"🔧 Correction appliquée:\n"
+        header += f"   Avant: {plain_text}\n"
+        header += f"   Après: {corrected_text}\n\n"
+
     # Detect intent and compute route if applicable
-    intent = detect_intent(plain_text)
+    intent = detect_intent(corrected_text)
     header += f"🤖 Intent détecté: {intent.name}\n\n"
 
     if intent == Intent.TRIP:
-        route_result = solve_travel_order(plain_text)
+        route_result = solve_travel_order(corrected_text)
         header += f"🚆 {route_result}\n\n"
     elif intent == Intent.NOT_FRENCH:
         header += "❌ Désolé, je ne traite que les demandes en français.\n\n"
