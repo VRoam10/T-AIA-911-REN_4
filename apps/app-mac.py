@@ -186,14 +186,14 @@ with gr.Blocks(title="Whisper • GPU • Live • SRT/VTT") as app:
 # 🎤 Whisper — Fast • GPU • Live
 
 ### 📂 Fichier audio
-✔ Auto langue  
-✔ VAD  
-✔ TXT / SRT / VTT  
+✔ Auto langue
+✔ VAD
+✔ TXT / SRT / VTT
 
 ### 🎙️ Micro en direct
-✔ Buffer circulaire  
-✔ Quasi temps réel  
-✔ GPU / CPU fallback  
+✔ Buffer circulaire
+✔ Quasi temps réel
+✔ GPU / CPU fallback
 """
     )
 
