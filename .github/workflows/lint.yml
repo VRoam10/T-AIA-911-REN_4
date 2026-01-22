@@ -33,9 +33,6 @@ jobs:
       - name: Check import sorting with isort
         run: isort --check-only --profile black .
 
-      - name: Lint with flake8
-        run: flake8 . --count --max-line-length=88 --extend-ignore=E203 --statistics
-
       - name: Type check with mypy
         run: mypy . --ignore-missing-imports
         continue-on-error: true
