@@ -55,8 +55,54 @@ LOCATION_PREPOSITIONS = [
 # Minimum similarity score (0-100) to consider a match
 MIN_SIMILARITY_SCORE = 70
 
+# Manual corrections for difficult cases that fuzzy matching misses
+MANUAL_CORRECTIONS = {
+    "rince": "Reims",
+    "rains": "Reims",
+    "reim": "Reims",
+    "bordo": "Bordeaux",
+}
+
 # Cache for city names loaded from CSV
 _CITY_NAMES: Optional[List[str]] = None
+
+# Cache for all French cities (not just stations)
+_ALL_FRENCH_CITIES: Optional[set] = None
+
+
+def _load_all_french_cities() -> set:
+    """Load all French city names from french_cities.txt.
+
+    This list is used to prevent false corrections of valid French cities
+    that are not in our stations database.
+
+    Returns
+    -------
+    set
+        Set of all French city names (lowercase for comparison)
+    """
+    global _ALL_FRENCH_CITIES
+
+    if _ALL_FRENCH_CITIES is not None:
+        return _ALL_FRENCH_CITIES
+
+    # Get path to french_cities.txt
+    current_file = Path(__file__).resolve()
+    data_dir = current_file.parent.parent.parent / "data"
+    cities_txt = data_dir / "french_cities.txt"
+
+    cities = set()
+    try:
+        with open(cities_txt, "r", encoding="utf-8") as f:
+            for line in f:
+                city = line.strip()
+                if city:  # Skip empty lines
+                    cities.add(city.lower())
+    except Exception as e:
+        print(f"Warning: Could not load french_cities.txt: {e}")
+
+    _ALL_FRENCH_CITIES = cities
+    return cities
 
 
 def _load_city_names() -> List[str]:
@@ -145,9 +191,19 @@ def _find_closest_city(word: str) -> Optional[str]:
         City name if match found, None otherwise
     """
     cities = _load_city_names()
+    all_french_cities = _load_all_french_cities()
 
     # Normalize to lowercase for comparison, but return original city name
     word_lower = word.lower()
+
+    # IMPORTANT: If the word is already a valid French city, don't correct it!
+    # This prevents "Nanterre" from being corrected to "Nantes"
+    if word_lower in all_french_cities:
+        return None
+
+    # Check manual corrections first
+    if word_lower in MANUAL_CORRECTIONS:
+        return MANUAL_CORRECTIONS[word_lower]
 
     # Use rapidfuzz to find the best match (case-insensitive)
     result = process.extractOne(
