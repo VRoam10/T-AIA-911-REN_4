@@ -191,14 +191,6 @@ Sorts and organizes imports.
 isort .
 ```
 
-### flake8 (Linter)
-
-Checks code for style issues and errors.
-
-```bash
-flake8 .
-```
-
 ### mypy (Type Checker)
 
 Performs static type checking.
@@ -224,7 +216,6 @@ It checks:
 
 - Code formatting (Black)
 - Import sorting (isort)
-- Linting (flake8)
 - Type checking (mypy)
 - Tests (pytest, if tests exist)
 

@@ -124,7 +124,7 @@ def transcribe_file(audio_path):
 # ============================
 # LIVE MICROPHONE
 # ============================
-audio_queue = queue.Queue()
+audio_queue: queue.Queue = queue.Queue()
 stop_event = threading.Event()
 
 
@@ -186,14 +186,14 @@ with gr.Blocks(title="Whisper • GPU • Live • SRT/VTT") as app:
 # 🎤 Whisper — Fast • GPU • Live
 
 ### 📂 Fichier audio
-✔ Auto langue  
-✔ VAD  
-✔ TXT / SRT / VTT  
+✔ Auto langue
+✔ VAD
+✔ TXT / SRT / VTT
 
 ### 🎙️ Micro en direct
-✔ Buffer circulaire  
-✔ Quasi temps réel  
-✔ GPU / CPU fallback  
+✔ Buffer circulaire
+✔ Quasi temps réel
+✔ GPU / CPU fallback
 """
     )
 
@@ -227,7 +227,10 @@ try:
     def _safe_api_info(_serialize: bool = False):
         return {}
 
-    gr_routes.api_info = _safe_api_info
+    if hasattr(gr_routes, "api_info"):
+        gr_routes.api_info = _safe_api_info
+    else:
+        setattr(gr_routes, "api_info", _safe_api_info)
 except Exception:
     pass
 
