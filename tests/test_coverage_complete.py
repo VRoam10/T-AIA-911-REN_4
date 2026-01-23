@@ -8,10 +8,10 @@ import io
 
 import pytest
 
+import src.pipeline as pipeline
 from src.graph.dijkstra import dijkstra
 from src.nlp import extract_stations as extract_module
 from src.nlp.intent import _basic_french_detection, _is_french, _is_travel_request
-import src.pipeline as pipeline
 from src.pipeline import (
     NLP_STRATEGIES,
     PATH_FINDER_STRATEGIES,
