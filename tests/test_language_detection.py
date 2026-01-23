@@ -1,4 +1,4 @@
-"""Tests for French language detection."""
+"""Tests for French language detection logic."""
 
 import os
 import sys
@@ -10,7 +10,7 @@ import pytest
 
 from src.nlp.intent import _is_french
 
-# Test cases for French language detection
+# Test cases for French language detection.
 FRENCH_TEXTS = [
     # Basic French
     "Bonjour, comment allez-vous ?",
@@ -26,6 +26,7 @@ FRENCH_TEXTS = [
     "Rendez-vous à 14h30, c'est parfait !",
 ]
 
+# Test cases for non-French input.
 NON_FRENCH_TEXTS = [
     # English
     "Hello, how are you?",

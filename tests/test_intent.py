@@ -11,7 +11,7 @@ from src.nlp.intent import Intent, detect_intent
 
 def test_intent_detection():
     """Test the intent detection with various inputs."""
-    # Test cases: (input_text, expected_intent)
+    # Test cases: (input_text, expected_intent).
     test_cases = [
         # French travel requests
         ("Comment aller de Paris à Lyon ?", Intent.TRIP),
@@ -32,7 +32,7 @@ def test_intent_detection():
         ("   ", Intent.UNKNOWN),
     ]
 
-    # Run tests
+    # Run the cases and collect a readable summary for debugging.
     total = len(test_cases)
     passed = 0
 
@@ -51,7 +51,7 @@ def test_intent_detection():
         print(f"  Got:      {result.name}")
         print()
 
-    # Print summary
+    # Print summary for easier diagnosis when running this file directly.
     success = passed == total
     print(f"\nResults: {passed}/{total} tests passed ({passed/total*100:.1f}%)")
     assert success, f"{total - passed} tests failed"

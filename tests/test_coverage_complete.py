@@ -21,6 +21,7 @@ from src.pipeline import (
 
 
 def test_dijkstra_invalid_nodes():
+    """Missing nodes should return an infinite distance."""
     graph = {"A": [("B", 1.0)]}
     path, distance = dijkstra(graph, "A", "C")
     assert path == []
@@ -28,6 +29,7 @@ def test_dijkstra_invalid_nodes():
 
 
 def test_dijkstra_skips_visited_node():
+    """Visited nodes should not be reprocessed."""
     graph = {
         "A": [("B", 5.0), ("C", 1.0)],
         "B": [],
@@ -40,6 +42,7 @@ def test_dijkstra_skips_visited_node():
 
 
 def test_load_stations_skips_invalid_rows(monkeypatch):
+    """Rows missing IDs or names should be ignored."""
     extract_module._load_stations.cache_clear()
 
     csv_data = "\n".join(
@@ -61,6 +64,7 @@ def test_load_stations_skips_invalid_rows(monkeypatch):
 
 
 def test_load_stations_oserror_returns_empty(monkeypatch):
+    """File access errors should produce an empty mapping."""
     extract_module._load_stations.cache_clear()
 
     def fake_open(self, *args, **kwargs):
@@ -73,6 +77,7 @@ def test_load_stations_oserror_returns_empty(monkeypatch):
 
 
 def test_intent_importerror_falls_back(monkeypatch):
+    """Import failures should fall back to rule-based detection."""
     import src.nlp.intent as intent_module
 
     original_import = builtins.__import__
@@ -98,6 +103,7 @@ def test_intent_importerror_falls_back(monkeypatch):
 
 
 def test_is_french_short_langdetect_non_fr(monkeypatch):
+    """Non-French detection for short strings should be respected."""
     import src.nlp.intent as intent_module
 
     monkeypatch.setattr(intent_module, "detect", lambda _: "en")
@@ -105,6 +111,7 @@ def test_is_french_short_langdetect_non_fr(monkeypatch):
 
 
 def test_is_french_langdetect_exception_fallback(monkeypatch):
+    """Detection exceptions should fall back to the basic heuristic."""
     import src.nlp.intent as intent_module
 
     def boom(_text: str) -> str:
@@ -115,6 +122,7 @@ def test_is_french_langdetect_exception_fallback(monkeypatch):
 
 
 def test_is_french_short_langdetect_fr(monkeypatch):
+    """Short French strings should pass when langdetect says 'fr'."""
     import src.nlp.intent as intent_module
 
     monkeypatch.setattr(intent_module, "detect", lambda _: "fr")
@@ -122,18 +130,22 @@ def test_is_french_short_langdetect_fr(monkeypatch):
 
 
 def test_basic_detection_no_words():
+    """Non-word strings should not be classified as French."""
     assert not _basic_french_detection("!!!")
 
 
 def test_basic_detection_low_french_density():
+    """Low French indicator density should return False."""
     assert not _basic_french_detection("trajet hello world test")
 
 
 def test_basic_detection_short_travel_term():
+    """Short travel keywords should be treated as French."""
     assert _basic_french_detection("trajet")
 
 
 def test_travel_request_dash_pattern(monkeypatch):
+    """Dash-separated routes should match the travel regex."""
     import src.nlp.intent as intent_module
 
     target = (
@@ -152,6 +164,7 @@ def test_travel_request_dash_pattern(monkeypatch):
 
 
 def test_travel_request_keyword_count(monkeypatch):
+    """Keyword counting should classify travel intent."""
     import src.nlp.intent as intent_module
 
     original_search = intent_module.re.search
@@ -166,6 +179,7 @@ def test_travel_request_keyword_count(monkeypatch):
 
 
 def test_travel_request_de_a_pattern(monkeypatch):
+    """The 'de ... à ...' pattern should be recognized."""
     import src.nlp.intent as intent_module
 
     target = (
@@ -184,6 +198,7 @@ def test_travel_request_de_a_pattern(monkeypatch):
 
 
 def test_solve_travel_order_unknown_strategies(monkeypatch):
+    """Unknown strategy names should return informative messages."""
     assert "Unknown NLP strategy" in solve_travel_order("test", nlp_name="missing")
     assert "Unknown path-finding strategy" in solve_travel_order(
         "test",
@@ -192,6 +207,7 @@ def test_solve_travel_order_unknown_strategies(monkeypatch):
 
 
 def test_solve_travel_order_error_and_no_path(monkeypatch):
+    """Pipeline should handle extraction errors and no-path cases."""
     from src.nlp.extract_stations import StationExtractionResult
 
     def fake_nlp(_sentence: str) -> StationExtractionResult:
@@ -216,6 +232,7 @@ def test_solve_travel_order_error_and_no_path(monkeypatch):
 
 
 def test_solve_travel_order_missing_departure(monkeypatch):
+    """Missing stations should raise a clear ValueError."""
     from src.nlp.extract_stations import StationExtractionResult
 
     def bad_nlp(_sentence: str) -> StationExtractionResult:
@@ -227,6 +244,7 @@ def test_solve_travel_order_missing_departure(monkeypatch):
 
 
 def test_solve_travel_order_success(monkeypatch):
+    """Successful flow should format path and distance."""
     from src.nlp.extract_stations import StationExtractionResult
 
     def ok_nlp(_sentence: str) -> StationExtractionResult:
@@ -248,6 +266,7 @@ def test_solve_travel_order_success(monkeypatch):
 
 
 def test_run_pipeline_prints(capsys, monkeypatch):
+    """run_pipeline should print the input and the result message."""
     monkeypatch.setattr(pipeline, "solve_travel_order", lambda _s: "OK")
     run_pipeline()
     captured = capsys.readouterr()
@@ -256,6 +275,7 @@ def test_run_pipeline_prints(capsys, monkeypatch):
 
 
 def test_pipeline_main_executes(capsys):
+    """The module __main__ entry point should run without errors."""
     import runpy
 
     runpy.run_module("src.pipeline", run_name="__main__")
