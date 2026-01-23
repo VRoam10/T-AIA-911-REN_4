@@ -116,81 +116,6 @@ def _is_french(text: str, min_confidence: float = 0.8) -> bool:
 
     # Then try with langdetect for more complex cases
     if detect is not None:
-        words = set(re.findall(r"[\w\']+", text_lower))
-        french_function_words = {
-            "le",
-            "la",
-            "les",
-            "un",
-            "une",
-            "des",
-            "du",
-            "de",
-            "d'",
-            "au",
-            "aux",
-            "à",
-            "et",
-            "est",
-            "dans",
-            "pour",
-            "avec",
-            "sur",
-            "par",
-            "sans",
-            "sous",
-            "chez",
-            "je",
-            "tu",
-            "il",
-            "elle",
-            "nous",
-            "vous",
-            "ils",
-            "elles",
-            "ce",
-            "cet",
-            "cette",
-            "ces",
-            "mon",
-            "ton",
-            "son",
-            "ma",
-            "ta",
-            "sa",
-            "mes",
-            "tes",
-            "ses",
-            "notre",
-            "votre",
-            "leur",
-            "nos",
-            "vos",
-            "leurs",
-            "qui",
-            "que",
-            "quoi",
-            "où",
-            "quand",
-            "comment",
-            "pourquoi",
-            "depuis",
-            "vers",
-        }
-        french_travel_terms = {
-            "trajet",
-            "itineraire",
-            "itinéraire",
-            "gare",
-            "arrêt",
-            "arret",
-            "aéroport",
-            "aeroport",
-        }
-        strong_french_signal = bool(
-            words.intersection(french_function_words.union(french_travel_terms))
-        )
-
         try:
             # For mixed language texts, check if there's significant French content
             if any(
@@ -209,14 +134,14 @@ def _is_french(text: str, min_confidence: float = 0.8) -> bool:
                 extended_text = f"{text} {text} {text}"
                 lang = detect(extended_text)
                 if lang == "fr":
-                    return bool(has_french_chars or strong_french_signal)
-                return bool(has_french_chars or strong_french_signal)
+                    return True
+                return _basic_french_detection(text)
 
             # For longer texts, use direct detection
             lang = detect(text)
             if lang == "fr":
-                return bool(has_french_chars or strong_french_signal)
-            return bool(has_french_chars or strong_french_signal)
+                return True
+            return _basic_french_detection(text)
         except (LangDetectException, Exception):
             pass
 
@@ -482,7 +407,13 @@ def _basic_french_detection(text: str) -> bool:
             or words.intersection(french_function_words.union(french_travel_terms))
         )
 
-    # For longer texts, be more lenient
+    # For longer texts, require a minimum density of French indicators
+    if len(words) >= 4:
+        if french_word_count < 2:
+            return False
+        if (french_word_count / len(words)) < 0.3:
+            return False
+
     min_required = max(1, len(words) // 5)  # Require at least 20% French words
     return has_french_chars or french_word_count >= min_required
 

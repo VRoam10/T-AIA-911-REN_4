@@ -31,6 +31,7 @@
 - Use pytest for all tests; add new tests under `tests/`.
 - Prefer small, focused parametrized tests (see `tests/test_language_detection.py`).
 - Run `pytest` before submitting changes; CI mirrors the same checks.
+- Before any push, run tests locally with coverage and only push if total coverage is 100%: `pytest --cov=src --cov-report=term-missing`.
 
 ## Commit & Pull Request Guidelines
 - Commit messages follow Conventional Commits (see recent history):
