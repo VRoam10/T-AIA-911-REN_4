@@ -37,6 +37,7 @@
   - Examples: `feat: add new feature`, `fix: resolve bug`, `docs: update README`.
 - Use commitizen for interactive commits: `cz commit`.
 - Branch names should follow the repo pattern (type/slug), e.g. `feat/add-result`, `fix/lint`, `docs/update-guidelines`.
+- All commits, code comments, PR descriptions, and documentation must be written in English.
 - PRs should include:
   - A short description of the change and impact.
   - Tests run (or a note if none were needed).
