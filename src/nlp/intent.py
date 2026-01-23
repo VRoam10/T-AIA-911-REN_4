@@ -208,6 +208,8 @@ def _basic_french_detection(text: str) -> bool:
         "quand",
         "comment",
         "pourquoi",
+        "depuis",
+        "vers",
         # Common verbs (conjugated forms)
         "suis",
         "es",
@@ -311,8 +313,73 @@ def _basic_french_detection(text: str) -> bool:
     if not words:
         return False
 
+    french_function_words = {
+        "le",
+        "la",
+        "les",
+        "un",
+        "une",
+        "des",
+        "du",
+        "de",
+        "d'",
+        "au",
+        "aux",
+        "à",
+        "et",
+        "est",
+        "dans",
+        "pour",
+        "avec",
+        "sur",
+        "par",
+        "sans",
+        "sous",
+        "chez",
+        "je",
+        "tu",
+        "il",
+        "elle",
+        "nous",
+        "vous",
+        "ils",
+        "elles",
+        "ce",
+        "cet",
+        "cette",
+        "ces",
+        "mon",
+        "ton",
+        "son",
+        "ma",
+        "ta",
+        "sa",
+        "mes",
+        "tes",
+        "ses",
+        "notre",
+        "votre",
+        "leur",
+        "nos",
+        "vos",
+        "leurs",
+        "qui",
+        "que",
+        "quoi",
+        "où",
+        "quand",
+        "comment",
+        "pourquoi",
+        "depuis",
+        "vers",
+    }
+
     # Count French words and check for common patterns
     french_word_count = len(words.intersection(french_indicators))
+
+    # If there are no French-specific characters, require at least one function word.
+    if not has_french_chars and not words.intersection(french_function_words):
+        return False
 
     # Special case for very short texts (1-3 words)
     if len(words) <= 3:
