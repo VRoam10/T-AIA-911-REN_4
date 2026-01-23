@@ -36,6 +36,7 @@
 - Commit messages follow Conventional Commits (see recent history):
   - Examples: `feat: add new feature`, `fix: resolve bug`, `docs: update README`.
 - Use commitizen for interactive commits: `cz commit`.
+- Branch names should follow the repo pattern (type/slug), e.g. `feat/add-result`, `fix/lint`, `docs/update-guidelines`.
 - PRs should include:
   - A short description of the change and impact.
   - Tests run (or a note if none were needed).
