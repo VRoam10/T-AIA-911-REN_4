@@ -308,6 +308,18 @@ def generate_pdf_report(
         spaceBefore=12,
     )
 
+    table_style = TableStyle(
+        [
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f0f0")),
+            ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+            ("GRID", (0, 0), (-1, -1), 1, colors.grey),
+        ]
+    )
+
     # Title
     story.append(Paragraph("Strategy Evaluation Results", title_style))
     story.append(Spacer(1, 0.3 * inch))
@@ -320,19 +332,7 @@ def generate_pdf_report(
         ["Timestamp", time.strftime("%Y-%m-%d %H:%M:%S")],
     ]
     summary_table = Table(summary_data, colWidths=[3 * inch, 2 * inch])
-    summary_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f0f0")),
-                ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
-                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 10),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
-                ("GRID", (0, 0), (-1, -1), 1, colors.grey),
-            ]
-        )
-    )
+    summary_table.setStyle(table_style)
     story.append(summary_table)
     story.append(Spacer(1, 0.3 * inch))
 
@@ -356,19 +356,7 @@ def generate_pdf_report(
             ["Max Execution Time", f"{metric.max_execution_time * 1000:.2f} ms"],
         ]
         perf_table = Table(perf_data, colWidths=[2.5 * inch, 2.5 * inch])
-        perf_table.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f0f0")),
-                    ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
-                    ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                    ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                    ("FONTSIZE", (0, 0), (-1, -1), 9),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-                    ("GRID", (0, 0), (-1, -1), 1, colors.grey),
-                ]
-            )
-        )
+        perf_table.setStyle(table_style)
         story.append(perf_table)
         story.append(Spacer(1, 0.2 * inch))
 
@@ -422,19 +410,7 @@ def generate_pdf_report(
         nlp_strategy_table = Table(
             nlp_strategy_data, colWidths=[2.5 * inch, 2.5 * inch]
         )
-        nlp_strategy_table.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f9f9f9")),
-                    ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
-                    ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                    ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                    ("FONTSIZE", (0, 0), (-1, -1), 8),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-                    ("GRID", (0, 0), (-1, -1), 1, colors.lightgrey),
-                ]
-            )
-        )
+        nlp_strategy_table.setStyle(table_style)
         story.append(nlp_strategy_table)
         story.append(Spacer(1, 0.15 * inch))
 
@@ -468,19 +444,7 @@ def generate_pdf_report(
             path_strategy_table = Table(
                 path_strategy_data, colWidths=[2.5 * inch, 2.5 * inch]
             )
-            path_strategy_table.setStyle(
-                TableStyle(
-                    [
-                        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f9f9f9")),
-                        ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
-                        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                        ("FONTSIZE", (0, 0), (-1, -1), 8),
-                        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-                        ("GRID", (0, 0), (-1, -1), 1, colors.lightgrey),
-                    ]
-                )
-            )
+            path_strategy_table.setStyle(table_style)
             story.append(path_strategy_table)
 
         story.append(Spacer(1, 0.25 * inch))
@@ -512,19 +476,7 @@ def generate_pdf_report(
             ],
         ]
         nlp_table_global = Table(nlp_data_global, colWidths=[3 * inch, 2 * inch])
-        nlp_table_global.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f0f0")),
-                    ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
-                    ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                    ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                    ("FONTSIZE", (0, 0), (-1, -1), 9),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-                    ("GRID", (0, 0), (-1, -1), 1, colors.grey),
-                ]
-            )
-        )
+        nlp_table_global.setStyle(table_style)
         story.append(nlp_table_global)
         story.append(Spacer(1, 0.2 * inch))
 
@@ -553,19 +505,7 @@ def generate_pdf_report(
             ],
         ]
         path_table_global = Table(path_data_global, colWidths=[3 * inch, 2 * inch])
-        path_table_global.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f0f0")),
-                    ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
-                    ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                    ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                    ("FONTSIZE", (0, 0), (-1, -1), 9),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-                    ("GRID", (0, 0), (-1, -1), 1, colors.grey),
-                ]
-            )
-        )
+        path_table_global.setStyle(table_style)
         story.append(path_table_global)
         story.append(Spacer(1, 0.2 * inch))
 
@@ -597,19 +537,7 @@ def generate_pdf_report(
         ],
     ]
     pipeline_table = Table(pipeline_data, colWidths=[3 * inch, 2 * inch])
-    pipeline_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f0f0")),
-                ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
-                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-                ("GRID", (0, 0), (-1, -1), 1, colors.grey),
-            ]
-        )
-    )
+    pipeline_table.setStyle(table_style)
     story.append(pipeline_table)
 
     # Build PDF
