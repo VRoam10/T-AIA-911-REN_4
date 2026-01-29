@@ -14,13 +14,6 @@ ASR_ERRORS = {
 
 SLANG = ["euh", "bah", "stp", "vite", "du coup"]
 
-NON_FRENCH = [
-    "book ticket now",
-    "quiero viajar mañana",
-    "ich fahre nach berlin",
-    "random words here",
-]
-
 
 def normalize(text):
     text = text.lower()
