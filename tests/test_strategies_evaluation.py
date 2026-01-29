@@ -280,7 +280,12 @@ def generate_pdf_report(
             "Install it with: pip install reportlab"
         )
 
-    doc = SimpleDocTemplate(str(pdf_path), pagesize=letter)
+    doc = SimpleDocTemplate(
+        str(pdf_path),
+        pagesize=letter,
+        title="Strategy Evaluation Results",
+        subject="Travel Order Resolver - Strategy Performance Report",
+    )
     story = []
     styles = getSampleStyleSheet()
 
@@ -354,7 +359,7 @@ def generate_pdf_report(
         perf_table.setStyle(
             TableStyle(
                 [
-                    ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#e8f4f8")),
+                    ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f0f0")),
                     ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
                     ("ALIGN", (0, 0), (-1, -1), "LEFT"),
                     ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
@@ -369,8 +374,121 @@ def generate_pdf_report(
 
     story.append(PageBreak())
 
-    # NLP Results
-    story.append(Paragraph("NLP Results", heading_style))
+    # Per-Strategy Results
+    story.append(Paragraph("Results Per Strategy", heading_style))
+    # story.append(Spacer(1, 0.15 * inch))
+
+    for metric in metrics:
+        strategy_name = f"{metric.nlp_strategy.upper()} NLP + {metric.path_strategy.upper()} Path Finder"
+        story.append(Paragraph(strategy_name, styles["Heading3"]))
+
+        # Filter results for this strategy combination
+        strategy_results = [
+            r
+            for r in results
+            if r.nlp_strategy == metric.nlp_strategy
+            and r.path_strategy == metric.path_strategy
+        ]
+
+        # NLP Results for this strategy
+        story.append(
+            Paragraph(
+                "NLP Results",
+                ParagraphStyle(
+                    "SubHeading3",
+                    parent=styles["Heading3"],
+                    fontSize=11,
+                    textColor=colors.HexColor("#555555"),
+                ),
+            )
+        )
+
+        nlp_strategy_results = [r for r in strategy_results if not r.error]
+        nlp_strategy_errors = [r for r in strategy_results if r.error]
+
+        nlp_strategy_data = [
+            ["Inputs Processed", str(len(strategy_results))],
+            ["Successfully Extracted", str(len(nlp_strategy_results))],
+            ["Extraction Errors", str(len(nlp_strategy_errors))],
+            [
+                "Avg Extraction Time",
+                (
+                    f"{sum(r.nlp_execution_time for r in strategy_results) / len(strategy_results) * 1000:.2f} ms"
+                    if strategy_results
+                    else "N/A"
+                ),
+            ],
+        ]
+        nlp_strategy_table = Table(
+            nlp_strategy_data, colWidths=[2.5 * inch, 2.5 * inch]
+        )
+        nlp_strategy_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f9f9f9")),
+                    ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
+                    ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                    ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                    ("GRID", (0, 0), (-1, -1), 1, colors.lightgrey),
+                ]
+            )
+        )
+        story.append(nlp_strategy_table)
+        story.append(Spacer(1, 0.15 * inch))
+
+        # Path Finder Results for this strategy
+        story.append(
+            Paragraph(
+                "Path Finder Results",
+                ParagraphStyle(
+                    "SubHeading3",
+                    parent=styles["Heading3"],
+                    fontSize=11,
+                    textColor=colors.HexColor("#555555"),
+                ),
+            )
+        )
+
+        path_strategy_results = [r for r in strategy_results if not r.error]
+
+        if path_strategy_results:
+            path_strategy_data = [
+                ["Paths Computed", str(len(path_strategy_results))],
+                [
+                    "Avg Computation Time",
+                    f"{sum(r.path_execution_time for r in path_strategy_results) / len(path_strategy_results) * 1000:.2f} ms",
+                ],
+                [
+                    "Avg Path Length",
+                    f"{sum(len(p) if p else 0 for p in [r.path for r in path_strategy_results]) / len(path_strategy_results):.2f} stations",
+                ],
+            ]
+            path_strategy_table = Table(
+                path_strategy_data, colWidths=[2.5 * inch, 2.5 * inch]
+            )
+            path_strategy_table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f9f9f9")),
+                        ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
+                        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                        ("FONTSIZE", (0, 0), (-1, -1), 8),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                        ("GRID", (0, 0), (-1, -1), 1, colors.lightgrey),
+                    ]
+                )
+            )
+            story.append(path_strategy_table)
+
+        story.append(Spacer(1, 0.25 * inch))
+
+    story.append(PageBreak())
+
+    # NLP Results - GLOBAL
+    story.append(Paragraph("NLP Results (Global)", heading_style))
     story.append(
         Paragraph(
             "The NLP component extracts departure and arrival stations from user input.",
@@ -378,22 +496,23 @@ def generate_pdf_report(
         )
     )
 
-    nlp_results = [r for r in results if r.nlp_strategy == "rule_based"]
-    nlp_errors = [r for r in nlp_results if r.error]
-    nlp_correct = [r for r in nlp_results if not r.error]
+    story.append(Spacer(1, 0.1 * inch))
 
-    if nlp_results:
-        nlp_data = [
-            ["Total Inputs Processed", str(len(nlp_results))],
-            ["Successfully Extracted", str(len(nlp_correct))],
-            ["Extraction Errors", str(len(nlp_errors))],
+    nlp_results_global = [r for r in results if not r.error]
+    nlp_errors_global = [r for r in results if r.error]
+
+    if results:
+        nlp_data_global = [
+            ["Total Inputs Processed", str(len(results))],
+            ["Successfully Extracted", str(len(nlp_results_global))],
+            ["Extraction Errors", str(len(nlp_errors_global))],
             [
                 "Avg Extraction Time",
-                f"{sum(r.nlp_execution_time for r in nlp_results) / len(nlp_results) * 1000:.2f} ms",
+                f"{sum(r.nlp_execution_time for r in results) / len(results) * 1000:.2f} ms",
             ],
         ]
-        nlp_table = Table(nlp_data, colWidths=[3 * inch, 2 * inch])
-        nlp_table.setStyle(
+        nlp_table_global = Table(nlp_data_global, colWidths=[3 * inch, 2 * inch])
+        nlp_table_global.setStyle(
             TableStyle(
                 [
                     ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f0f0")),
@@ -406,11 +525,11 @@ def generate_pdf_report(
                 ]
             )
         )
-        story.append(nlp_table)
+        story.append(nlp_table_global)
         story.append(Spacer(1, 0.2 * inch))
 
-    # Path Finder Results
-    story.append(Paragraph("Path Finder Results", heading_style))
+    # Path Finder Results - GLOBAL
+    story.append(Paragraph("Path Finder Results (Global)", heading_style))
     story.append(
         Paragraph(
             "The path finder computes the shortest route between two stations.",
@@ -418,21 +537,23 @@ def generate_pdf_report(
         )
     )
 
-    path_results = [r for r in results if r.path_strategy == "dijkstra" and not r.error]
-    if path_results:
-        path_data = [
-            ["Total Paths Computed", str(len(path_results))],
+    story.append(Spacer(1, 0.1 * inch))
+
+    path_results_global = [r for r in results if not r.error]
+    if path_results_global:
+        path_data_global = [
+            ["Total Paths Computed", str(len(path_results_global))],
             [
                 "Avg Path Computation Time",
-                f"{sum(r.path_execution_time for r in path_results) / len(path_results) * 1000:.2f} ms",
+                f"{sum(r.path_execution_time for r in path_results_global) / len(path_results_global) * 1000:.2f} ms",
             ],
             [
                 "Avg Path Length",
-                f"{sum(len(p) if p else 0 for p in [r.path for r in path_results]) / len(path_results):.2f} stations",
+                f"{sum(len(p) if p else 0 for p in [r.path for r in path_results_global]) / len(path_results_global):.2f} stations",
             ],
         ]
-        path_table = Table(path_data, colWidths=[3 * inch, 2 * inch])
-        path_table.setStyle(
+        path_table_global = Table(path_data_global, colWidths=[3 * inch, 2 * inch])
+        path_table_global.setStyle(
             TableStyle(
                 [
                     ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f0f0")),
@@ -445,10 +566,8 @@ def generate_pdf_report(
                 ]
             )
         )
-        story.append(path_table)
+        story.append(path_table_global)
         story.append(Spacer(1, 0.2 * inch))
-
-    story.append(PageBreak())
 
     # Pipeline Results
     story.append(Paragraph("Pipeline Results", heading_style))
@@ -458,6 +577,8 @@ def generate_pdf_report(
             styles["Normal"],
         )
     )
+
+    story.append(Spacer(1, 0.1 * inch))
 
     all_results = results
     total_time = sum(r.total_execution_time for r in all_results)
