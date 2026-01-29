@@ -339,12 +339,8 @@ def generate_pdf_report(
     # Strategy Performance
     story.append(Paragraph("Strategy Performance", heading_style))
     for metric in metrics:
-        story.append(
-            Paragraph(
-                f"{metric.nlp_strategy.upper()} NLP + {metric.path_strategy.upper()} Path Finder",
-                styles["Heading3"],
-            )
-        )
+        strategy_name = f"{metric.nlp_strategy.upper()} NLP + {metric.path_strategy.upper()} Path Finder"
+        story.append(Paragraph(strategy_name, styles["Heading3"]))
 
         perf_data = [
             [
@@ -355,20 +351,23 @@ def generate_pdf_report(
             ["Min Execution Time", f"{metric.min_execution_time * 1000:.2f} ms"],
             ["Max Execution Time", f"{metric.max_execution_time * 1000:.2f} ms"],
         ]
+
+        story.append(
+            Paragraph(
+                "Pipeline Results",
+                ParagraphStyle(
+                    "SubHeading3",
+                    parent=styles["Heading3"],
+                    fontSize=11,
+                    textColor=colors.HexColor("#555555"),
+                ),
+            )
+        )
+
         perf_table = Table(perf_data, colWidths=[2.5 * inch, 2.5 * inch])
         perf_table.setStyle(table_style)
         story.append(perf_table)
         story.append(Spacer(1, 0.2 * inch))
-
-    story.append(PageBreak())
-
-    # Per-Strategy Results
-    story.append(Paragraph("Results Per Strategy", heading_style))
-    # story.append(Spacer(1, 0.15 * inch))
-
-    for metric in metrics:
-        strategy_name = f"{metric.nlp_strategy.upper()} NLP + {metric.path_strategy.upper()} Path Finder"
-        story.append(Paragraph(strategy_name, styles["Heading3"]))
 
         # Filter results for this strategy combination
         strategy_results = [
@@ -450,6 +449,9 @@ def generate_pdf_report(
         story.append(Spacer(1, 0.25 * inch))
 
     story.append(PageBreak())
+
+    # Per-Strategy Results
+    story.append(Paragraph("Results Per Strategy", heading_style))
 
     # NLP Results - GLOBAL
     story.append(Paragraph("NLP Results (Global)", heading_style))
