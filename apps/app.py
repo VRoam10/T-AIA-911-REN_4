@@ -217,6 +217,6 @@ with gr.Blocks(title="Whisper • SRT style text") as app:
         output = gr.Textbox(label="📝 Transcription", lines=18)
         map_view = gr.HTML(value="<p></p>")
 
-    btn.click(transcribe_file, audio_file, [output, map_view])
+    btn.click(transcribe_file, inputs=[audio_file, model_dd], outputs=[output, map_view])
 
 app.launch()
