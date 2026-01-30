@@ -1,4 +1,4 @@
-"""Simple launcher for the voice + route-planning app.
+﻿"""Simple launcher for the voice + route-planning app.
 
 This script asks whether you want to run the Mac or Windows variant
 of the application, then starts the corresponding Gradio server.
@@ -16,28 +16,35 @@ def main() -> None:
 
     print("=== Travel Resolver launcher ===")
     print("1) Mac  (apps/app-mac.py)")
-    print("2) Windows (apps/app.py)")
+    print("2) Windows (apps.app module)")
     choice = input("Choix (1/2, mac/windows) : ").strip().lower()
 
     if choice in {"1", "mac", "m"}:
         script_name = "apps/app-mac.py"
+        use_module = False
     elif choice in {"2", "windows", "win", "w"}:
-        script_name = "apps/app.py"
+        script_name = "apps.app"
+        use_module = True
     else:
         print("Choix non reconnu, je pars sur Mac (app-mac.py).")
         script_name = "apps/app-mac.py"
+        use_module = False
 
-    script_path = project_root / script_name
-    if not script_path.exists():
-        print(f"Impossible de trouver {script_name} à la racine du projet.")
-        sys.exit(1)
+    if not use_module:
+        script_path = project_root / script_name
+        if not script_path.exists():
+            print(f"Impossible de trouver {script_name} à la racine du projet.")
+            sys.exit(1)
 
     venv_python = project_root / ".venv" / "bin" / "python"
     if not venv_python.exists():
         venv_python = project_root / ".venv" / "Scripts" / "python.exe"
 
     python_exe = str(venv_python) if venv_python.exists() else sys.executable
-    cmd = [python_exe, str(script_path)]
+    if use_module:
+        cmd = [python_exe, "-m", script_name]
+    else:
+        cmd = [python_exe, str(script_path)]
     print(f"Lancement de {script_name} avec : {' '.join(cmd)}")
     subprocess.run(cmd, check=False)
 

@@ -244,3 +244,61 @@ def extract_stations(sentence: str) -> StationExtractionResult:
         arrival=arrival,
         error=error,
     )
+
+
+def extract_stations_from_locations(
+    sentence: str, locations: list[str]
+) -> StationExtractionResult:
+    """Map extracted location strings to station codes.
+
+    Uses station mappings from the CSV and orders by appearance in the sentence.
+    """
+    if not sentence or not sentence.strip():
+        return StationExtractionResult(
+            departure=None,
+            arrival=None,
+            error="Empty sentence.",
+        )
+
+    if not locations:
+        return StationExtractionResult(
+            departure=None,
+            arrival=None,
+            error="No locations detected.",
+        )
+
+    text = _canonicalize(sentence)
+    stations = _load_stations()
+
+    matches: list[Tuple[int, str]] = []
+    for loc in locations:
+        key = _canonicalize(loc)
+        if not key:
+            continue
+        code = stations.get(key)
+        if not code:
+            continue
+        pos = text.find(key)
+        if pos != -1:
+            matches.append((pos, code))
+
+    if not matches:
+        return StationExtractionResult(
+            departure=None,
+            arrival=None,
+            error="Could not detect both departure and arrival stations.",
+        )
+
+    matches.sort(key=lambda item: item[0])
+    departure = matches[0][1]
+    arrival = matches[1][1] if len(matches) > 1 else None
+
+    error: Optional[str] = None
+    if departure is None or arrival is None:
+        error = "Could not detect both departure and arrival stations."
+
+    return StationExtractionResult(
+        departure=departure,
+        arrival=arrival,
+        error=error,
+    )

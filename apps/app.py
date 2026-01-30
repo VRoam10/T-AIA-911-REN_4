@@ -1,43 +1,36 @@
+﻿# -*- coding: utf-8 -*-
+import gradio as gr
 import html
-import os
-import sys
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
 
-# Add parent directory to path to import from src
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-import gradio as gr
-from faster_whisper import WhisperModel
-from utils import (
-    extract_departure_and_destinations,
-    extract_locations,
-    extract_valid_cities,
+from src.asr import (
+    benchmark,
+    clear_model_cache,
+    compute_rtf,
+    format_benchmark_table,
     format_ts,
+    transcribe_with_progress,
 )
-from src.pipeline import solve_travel_order
-from src.nlp.intent import detect_intent, Intent
-from src.graph.load_graph import load_graph
 from src.graph.dijkstra import dijkstra
-from pathlib import Path
+from src.graph.load_graph import load_graph
+from src.monitoring import clear_torch_cuda_cache, get_gpu_live_stats, log_gpu_memory
+from src.nlp.extract_stations import find_nearest_station
+from src.nlp.intent import Intent, detect_intent
+from src.pipeline import solve_travel_order
+from src.strategies import CityStrategy, DateStrategy, extract_departure_and_destinations, run_extraction
+from src.viz.map import plot_path
 
 # Load graph for direct route calculation
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 GRAPH = load_graph(str(DATA_DIR / "stations.csv"), str(DATA_DIR / "edges.csv"))
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
-
-from src.pipeline import solve_travel_order
-
 # ============================ CONFIG ============================
-DEFAULT_DEVICE = "cuda"  # cuda or cpu
-DEFAULT_COMPUTE = "float16"
+DEFAULT_DEVICE: str = "cuda"  # cuda or cpu
+DEFAULT_COMPUTE: str = "float16"
 
-# Liste de modèles testables (ta base + des FR CT2 HF)
-MODEL_CHOICES = [
+MODEL_CHOICES: List[str] = [
     "small",
     "medium",
     "large-v3",
@@ -45,8 +38,12 @@ MODEL_CHOICES = [
     "brandenkmurray/faster-whisper-large-v3-french-distil-dec16",
 ]
 
-# Cache pour éviter de recharger un modèle déjà chargé
-MODEL_CACHE: dict[tuple[str, str, str], WhisperModel] = {}
+CITY_STRATEGIES: List[CityStrategy] = ["legacy_spacy", "hf_ner"]
+PIPELINE_STRATEGIES: List[str] = ["rule_based", "legacy_spacy", "hf_ner"]
+DATE_STRATEGIES: List[DateStrategy] = ["eds", "hf_ner"]
+
+LANG_CHOICES: List[str] = ["auto", "fr", "en"]
+BEAM_CHOICES: List[int] = [1, 2, 3, 4, 5]
 
 
 def _map_iframe_from_html(document_html: str, *, height_px: int = 520) -> str:
@@ -66,50 +63,32 @@ def _extract_map_error(message: str) -> Optional[str]:
     return message[idx:].strip()
 
 
-def get_model(model_id: str, device: str, compute_type: str) -> WhisperModel:
-    key = (model_id, device, compute_type)
-    if key in MODEL_CACHE:
-        return MODEL_CACHE[key]
-
-    # Tentative GPU, fallback CPU si souci
-    try:
-        m = WhisperModel(model_id, device=device, compute_type=compute_type)
-    except Exception as e:
-        print(f"⚠️ Failed loading {model_id} on {device}/{compute_type}: {e}")
-        m = WhisperModel(model_id, device="cpu", compute_type="int8")
-
-    MODEL_CACHE[key] = m
-    return m
+def _plain_text_from_srt(full_text: str) -> str:
+    chunks = [c for c in full_text.split("\n\n") if c.strip()]
+    lines = []
+    for chunk in chunks:
+        parts = chunk.split("\n", 1)
+        if len(parts) == 2:
+            lines.append(parts[1].strip())
+    return " ".join(lines).strip()
 
 
-def transcribe_file(audio_path: str, model_id: str) -> str:
-    if not audio_path:
-        return "❌ Aucun fichier audio", "<p></p>"
-
-    model = get_model(model_id, DEFAULT_DEVICE, DEFAULT_COMPUTE)
-
-    segments_gen, info = model.transcribe(
-        audio_path,
-        language=None,
-        vad_filter=True,
-        vad_parameters=dict(min_silence_duration_ms=300),
+def _analyze_text(
+    plain_text: str,
+    *,
+    model_label: str,
+    city_strategy: CityStrategy,
+    date_strategy: DateStrategy,
+    pipeline_strategy: str,
+    audio_meta: str = "",
+) -> Tuple[str, str]:
+    header = (
+        f"🧠 Modèle: {model_label}\n"
+        f"{audio_meta}"
+        f"🏙️ Stratégie villes: {city_strategy}\n"
+        f"📅 Stratégie dates: {date_strategy}\n\n"
     )
 
-    # Convert generator to list to be able to iterate multiple times
-    segments = list(segments_gen)
-
-    output = [
-        f"{format_ts(seg.start)} --> {format_ts(seg.end)}\n{seg.text.strip()}\n"
-        for seg in segments
-    ]
-    full_text = "\n".join(output)
-
-    # Extract plain text without timestamps for intent detection
-    plain_text = " ".join([seg.text.strip() for seg in segments])
-
-    header = f"🧠 Modèle: {model_id}\n🌍 Langue détectée: {info.language} ({info.language_probability:.2f})\n\n"
-
-    # Detect intent and compute route if applicable
     intent = detect_intent(plain_text)
     header += f"🤖 Intent détecté: {intent.name}\n\n"
 
@@ -122,24 +101,35 @@ def transcribe_file(audio_path: str, model_id: str) -> str:
         header += "❌ Désolé, je n'ai pas compris votre demande.\n"
         header += "   Assurez-vous que votre message n'est pas vide.\n\n"
 
-    # Extract cities with GPS coordinates and nearest stations
-    locations = extract_locations(plain_text)
-    valid_cities = extract_valid_cities(locations)
+    extracted = run_extraction(
+        full_text=plain_text,
+        city_strategy=city_strategy,
+        date_strategy=date_strategy,
+        dates_normalize=True,
+    )
+    valid_cities = extracted["cities"]
 
     if valid_cities:
         header += "📍 Lieux détectés :\n"
         for city in valid_cities:
             station_info = ""
-            if city.get("station_name"):
-                station_info = f" → Gare: {city['station_name']} ({city['station_distance_km']:.1f} km)"
+            station_data = find_nearest_station(city["lat"], city["lon"])
+            if station_data:
+                station_code, station_name, station_distance_km = station_data
+                city["station_code"] = station_code
+                city["station_name"] = station_name
+                city["station_distance_km"] = station_distance_km
+                station_info = f" → Gare: {station_name} ({station_distance_km:.1f} km)"
             header += (
                 f"- {city['name']} (lat: {city['lat']:.5f}, lon: {city['lon']:.5f}){station_info}\n"
             )
         header += "\n"
 
     route_info = extract_departure_and_destinations(plain_text, valid_cities)
+    path_for_map: Optional[List[str]] = None
+    dep_station: Optional[str] = None
+    arr_station: Optional[str] = None
 
-    # Calculate train route if we have departure and destination
     if intent == Intent.TRIP and route_info["depart"] and route_info["destinations"]:
         dep_station = route_info["depart"].get("station_code")
         arr_station = route_info["destinations"][0].get("station_code") if route_info["destinations"] else None
@@ -147,18 +137,17 @@ def transcribe_file(audio_path: str, model_id: str) -> str:
         if dep_station and arr_station:
             path, train_distance = dijkstra(GRAPH, dep_station, arr_station)
             if path:
+                path_for_map = path
                 path_str = " -> ".join(path)
-
-                # Calculate distances to/from stations
                 dep_to_station = route_info["depart"].get("station_distance_km", 0)
                 arr_to_station = route_info["destinations"][0].get("station_distance_km", 0)
                 total_distance = train_distance + dep_to_station + arr_to_station
 
                 header += f"🚆 Trajet ferroviaire: {path_str}\n"
                 header += f"   Distance train: {train_distance} km\n"
-                if dep_to_station > 1:  # Only show if > 1km
+                if dep_to_station > 1:
                     header += f"   + {route_info['depart']['name']} → {route_info['depart'].get('station_name')}: {dep_to_station:.1f} km\n"
-                if arr_to_station > 1:  # Only show if > 1km
+                if arr_to_station > 1:
                     header += f"   + {route_info['destinations'][0].get('station_name')} → {route_info['destinations'][0]['name']}: {arr_to_station:.1f} km\n"
                 header += f"   📊 Distance totale estimée: {total_distance:.1f} km\n\n"
             else:
@@ -178,25 +167,155 @@ def transcribe_file(audio_path: str, model_id: str) -> str:
         if route_info["destinations"]:
             for idx, dest in enumerate(route_info["destinations"], 1):
                 station_info = f" (Gare: {dest.get('station_name', 'N/A')})" if dest.get("station_name") else ""
-                header += (
-                    f"  {idx}. Destination : {dest['name']}{station_info}\n"
-                )
+                header += f"  {idx}. Destination : {dest['name']}{station_info}\n"
 
-    if route_info.get("dates"):
-        header += "📅 Dates détectées : " + ", ".join(route_info["dates"]) + "\n\n"
+    dates_norm = extracted.get("dates_norm") or []
+    dates_raw = extracted.get("dates_raw") or []
+    if dates_norm:
+        header += "📅 Dates (ISO) : " + ", ".join(dates_norm) + "\n\n"
+    elif dates_raw:
+        header += "📅 Dates (raw) : " + ", ".join(dates_raw) + "\n\n"
 
     tmp = tempfile.mkdtemp()
-    map_path = os.path.join(tmp, "trajectory.html")
-    analysis = solve_travel_order(full_text.strip(), map_output_html=map_path)
+    map_path = Path(tmp) / "trajectory.html"
 
-    try:
-        with open(map_path, "r", encoding="utf-8") as f:
-            map_html = _map_iframe_from_html(f.read())
-    except OSError:
-        err = _extract_map_error(analysis)
-        map_html = f"<pre>{html.escape(err or 'No map')}</pre>"
+    if path_for_map:
+        try:
+            plot_path(path_for_map, DATA_DIR / "stations.csv", map_path)
+            map_html = _map_iframe_from_html(map_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            map_html = f"<pre>{html.escape(f'No map: {exc}')}</pre>"
+        analysis = solve_travel_order(
+            plain_text.strip(),
+            nlp_name=pipeline_strategy,
+            departure_station=dep_station,
+            arrival_station=arr_station,
+            generate_map=False,
+            map_output_html=map_path,
+        )
+    else:
+        analysis = solve_travel_order(
+            plain_text.strip(),
+            nlp_name=pipeline_strategy,
+            departure_station=dep_station,
+            arrival_station=arr_station,
+            map_output_html=map_path,
+        )
+        try:
+            map_html = _map_iframe_from_html(map_path.read_text(encoding="utf-8"))
+        except OSError:
+            err = _extract_map_error(analysis)
+            map_html = f"<pre>{html.escape(err or 'No map')}</pre>"
 
-    return header + full_text + "\n\n" + analysis, map_html
+    return header + "\n" + analysis, map_html
+
+
+def transcribe_and_analyze(
+    audio_path: str,
+    model_id: str,
+    lang_choice: str,
+    beam_size: int,
+    city_strategy: CityStrategy,
+    date_strategy: DateStrategy,
+    pipeline_strategy: str,
+    progress: gr.Progress = gr.Progress(),
+) -> Tuple[str, str]:
+    if not audio_path:
+        return "❌ Aucun fichier audio", "<p></p>"
+
+    log_gpu_memory(prefix="Before transcribe | ", device=DEFAULT_DEVICE)
+
+    full_text, info, elapsed, audio_duration = transcribe_with_progress(
+        audio_path=audio_path,
+        model_id=model_id,
+        device=DEFAULT_DEVICE,
+        compute_type=DEFAULT_COMPUTE,
+        lang_choice=lang_choice,
+        beam_size=beam_size,
+        format_ts_fn=format_ts,
+        gradio_progress=progress,
+    )
+
+    log_gpu_memory(prefix="After transcribe  | ", device=DEFAULT_DEVICE)
+
+    plain_text = _plain_text_from_srt(full_text)
+    audio_meta = (
+        f"🌍 Langue détectée: {info.language} ({info.language_probability:.2f})\n"
+        f"⏱️ Temps: {elapsed:.2f}s | ⚡ RTF: {compute_rtf(elapsed, audio_duration)}\n"
+    )
+
+    header, map_html = _analyze_text(
+        plain_text,
+        model_label=model_id,
+        city_strategy=city_strategy,
+        date_strategy=date_strategy,
+        pipeline_strategy=pipeline_strategy,
+        audio_meta=audio_meta,
+    )
+
+    return header + "\n" + full_text, map_html
+
+
+def analyze_text_input(
+    text: str,
+    city_strategy: CityStrategy,
+    date_strategy: DateStrategy,
+    pipeline_strategy: str,
+) -> Tuple[str, str]:
+    if not text or not text.strip():
+        return "❌ Texte vide", "<p></p>"
+
+    header, map_html = _analyze_text(
+        text.strip(),
+        model_label="text",
+        city_strategy=city_strategy,
+        date_strategy=date_strategy,
+        pipeline_strategy=pipeline_strategy,
+        audio_meta="",
+    )
+    return header, map_html
+
+
+def run_benchmark(
+    audio_path: str,
+    model_ids: List[str],
+    lang_choice: str,
+    beam_size: int,
+    progress: gr.Progress = gr.Progress(),
+) -> str:
+    if not audio_path:
+        return "❌ Aucun fichier audio"
+    if not model_ids or len(model_ids) < 2:
+        return "❌ Sélectionne 2–5 modèles pour le benchmark"
+    if len(model_ids) > 5:
+        model_ids = model_ids[:5]
+
+    rows = benchmark(
+        audio_path=audio_path,
+        model_ids=model_ids,
+        device=DEFAULT_DEVICE,
+        compute_type=DEFAULT_COMPUTE,
+        lang_choice=lang_choice,
+        beam_size=beam_size,
+        gradio_progress=progress,
+    )
+
+    rows_sorted = sorted(rows, key=lambda r: r["time_s"])
+    table = format_benchmark_table(rows_sorted)
+    winner = rows_sorted[0]
+
+    return (
+        "## 🔁 Benchmark Results\n\n"
+        + table
+        + f"\n\n🏁 Fastest: `{winner['model']}` ({winner['time_s']:.2f}s, RTF {winner['rtf']})\n"
+        + "🧠 Reminder: speed ≠ accuracy. For real accuracy comparison, add WER/CER with a reference transcript."
+    )
+
+
+def ui_clear_cache() -> str:
+    removed = clear_model_cache()
+    extra = clear_torch_cuda_cache(device=DEFAULT_DEVICE) or ""
+    return f"🧹 Cache cleared: removed {removed} model(s). {extra}".strip()
 
 
 # ============================ UI ============================
@@ -209,14 +328,76 @@ with gr.Blocks(title="Whisper • SRT style text") as app:
 """
     )
 
-    model_dd = gr.Dropdown(MODEL_CHOICES, value="small", label="🧠 Modèle")
-    audio_file = gr.Audio(type="filepath", label="🎵 Fichier audio")
-    btn = gr.Button("🚀 Transcrire")
+    gpu_stats_md = gr.Markdown(get_gpu_live_stats(device=DEFAULT_DEVICE))
+    timer = gr.Timer(2.0)
+    timer.tick(fn=lambda: get_gpu_live_stats(device=DEFAULT_DEVICE), outputs=gpu_stats_md)
+
+    with gr.Row():
+        model_dd = gr.Dropdown(MODEL_CHOICES, value="small", label="🧠 Modèle")
+        lang_dd = gr.Dropdown(LANG_CHOICES, value="auto", label="🌍 Language")
+        beam_dd = gr.Dropdown(BEAM_CHOICES, value=1, label="🎯 Beam size")
+
+    with gr.Row():
+        city_strategy_dd = gr.Dropdown(
+            CITY_STRATEGIES, value="legacy_spacy", label="🏙️ City strategy"
+        )
+        pipeline_strategy_dd = gr.Dropdown(
+            PIPELINE_STRATEGIES, value="legacy_spacy", label="🧭 Pipeline strategy"
+        )
+        date_strategy_dd = gr.Dropdown(
+            DATE_STRATEGIES, value="eds", label="📅 Date strategy"
+        )
+
+    with gr.Row():
+        audio_file = gr.Audio(type="filepath", label="🎵 Fichier audio")
+        text_input = gr.Textbox(label="📝 Texte", lines=3, placeholder="Écris ta demande ici...")
+
+    with gr.Row():
+        btn = gr.Button("🚀 Transcrire")
+        btn_text = gr.Button("📝 Analyser texte")
+        btn_clear = gr.Button("🧹 Clear cache")
 
     with gr.Row():
         output = gr.Textbox(label="📝 Transcription", lines=18)
         map_view = gr.HTML(value="<p></p>")
 
-    btn.click(transcribe_file, inputs=[audio_file, model_dd], outputs=[output, map_view])
+    cache_status = gr.Textbox(label="Cache status", lines=2)
+
+    btn.click(
+        transcribe_and_analyze,
+        inputs=[
+            audio_file,
+            model_dd,
+            lang_dd,
+            beam_dd,
+            city_strategy_dd,
+            date_strategy_dd,
+            pipeline_strategy_dd,
+        ],
+        outputs=[output, map_view],
+    )
+
+    btn_text.click(
+        analyze_text_input,
+        inputs=[text_input, city_strategy_dd, date_strategy_dd, pipeline_strategy_dd],
+        outputs=[output, map_view],
+    )
+
+    btn_clear.click(fn=ui_clear_cache, outputs=cache_status)
+
+    gr.Markdown("## 🔁 Benchmark (2–5 models)")
+    bench_models = gr.CheckboxGroup(
+        choices=MODEL_CHOICES,
+        value=["small", "bofenghuang/whisper-large-v2-cv11-french-ct2"],
+        label="Select 2–5 models",
+    )
+    btn_bench = gr.Button("🔁 Run benchmark")
+    bench_out = gr.Markdown()
+
+    btn_bench.click(
+        run_benchmark,
+        inputs=[audio_file, bench_models, lang_dd, beam_dd],
+        outputs=bench_out,
+    )
 
 app.launch()
