@@ -14,7 +14,7 @@ from utils import (
 )
 from src.pipeline import solve_travel_order
 from src.nlp.intent import detect_intent, Intent
-from src.nlp.phonetic_correction import correct_city_names
+# phonetic_correction removed - using French Whisper model instead
 from src.graph.load_graph import load_graph
 from src.graph.dijkstra import dijkstra
 from pathlib import Path
@@ -62,21 +62,12 @@ def transcribe_file(audio_path: str) -> str:
     # Extract plain text without timestamps for intent detection
     plain_text = " ".join([seg.text.strip() for seg in segments])
 
-    # Apply phonetic correction for city names
-    corrected_text = correct_city_names(plain_text)
-
     header = (
         f"🌍 Langue détectée: {info.language} ({info.language_probability:.2f})\n\n"
     )
 
-    # Show correction if text was changed
-    if corrected_text != plain_text:
-        header += f"🔧 Correction appliquée:\n"
-        header += f"   Avant: {plain_text}\n"
-        header += f"   Après: {corrected_text}\n\n"
-
     # Detect intent and compute route if applicable
-    intent = detect_intent(corrected_text)
+    intent = detect_intent(plain_text)
     header += f"🤖 Intent détecté: {intent.name}\n\n"
 
     if intent == Intent.NOT_FRENCH:
@@ -89,7 +80,7 @@ def transcribe_file(audio_path: str) -> str:
         header += "   Assurez-vous que votre message n'est pas vide.\n\n"
 
     # Extract cities with GPS coordinates and nearest stations
-    locations = extract_locations(corrected_text)
+    locations = extract_locations(plain_text)
     valid_cities = extract_valid_cities(locations)
 
     if valid_cities:
@@ -103,7 +94,7 @@ def transcribe_file(audio_path: str) -> str:
             )
         header += "\n"
 
-    route_info = extract_departure_and_destinations(corrected_text, valid_cities)
+    route_info = extract_departure_and_destinations(plain_text, valid_cities)
 
     # Calculate train route if we have departure and destination
     if intent == Intent.TRIP and route_info["depart"] and route_info["destinations"]:
