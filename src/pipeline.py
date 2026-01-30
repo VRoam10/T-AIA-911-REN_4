@@ -71,6 +71,9 @@ def solve_travel_order(
     if result.error:
         return f"Extraction error: {result.error}"
 
+    if result.departure is None or result.arrival is None:
+        raise ValueError("Departure or arrival not set")
+
     departure = result.departure
     arrival = result.arrival
 

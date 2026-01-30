@@ -1,10 +1,8 @@
+import math
 from pathlib import Path
 
-import math
-
-from src.graph.load_graph import Graph, load_graph
 from src.graph.dijkstra import dijkstra
-
+from src.graph.load_graph import Graph, load_graph
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
@@ -61,4 +59,3 @@ def test_dijkstra_no_path_returns_inf():
 
     assert path == []
     assert math.isinf(distance)
-

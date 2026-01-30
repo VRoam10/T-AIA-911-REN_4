@@ -1,82 +1,82 @@
 # Travel Order Resolver
 
-Le **Travel Order Resolver** est un projet académique en Python qui transforme une phrase en français décrivant un trajet en une structure exploitable : il extrait une gare de départ et une gare d’arrivée, puis calcule le chemin le plus court entre ces deux gares à l’aide d’un graphe et de l’algorithme de Dijkstra.
+The **Travel Order Resolver** is an academic project in Python that transforms a sentence in French describing a journey into a usable structure: it extracts a departure station and an arrival station, then calculates the shortest route between these two stations using a graph and Dijkstra's algorithm.
 This setup includes:
 
 - **Git hooks** for conventional commits validation
 - **Pre-commit hooks** for automatic code formatting and linting
 - **GitHub Actions** workflow for CI/CD checks on PRs
 
-Le projet fonctionne entièrement hors‑ligne et sert de baseline pour explorer différentes approches de traitement du langage naturel (NLP).
+The project runs entirely offline and serves as a baseline for exploring different approaches to natural language processing (NLP).
 
 ## Description
 
-À partir d’une phrase simple comme :
+Starting with a simple sentence such as:
 
 > Je veux aller de Paris à Marseille
 
-le pipeline actuel :
+the current pipeline:
 
-1. analyse le texte pour détecter les gares mentionnées (départ et arrivée) ;
-2. charge un graphe de transport fictif à partir de fichiers CSV ;
-3. calcule le plus court chemin entre les deux gares avec Dijkstra ;
-4. affiche le trajet et la distance totale.
+1. analyses the text to detect the stations mentioned (departure and arrival);
+2. loads a fictitious transport graph from CSV files;
+3. calculates the shortest route between the two stations using Dijkstra;
+4. displays the route and total distance.
 
-Le but est pédagogique : poser une architecture propre et extensible, puis améliorer progressivement la partie NLP.
+The aim is educational: to establish a clean and extensible architecture, then gradually improve the NLP part.
 
-## Architecture globale
+## Overall architecture
 
-Le code est organisé en trois briques principales :
+The code is organised into three main components:
 
-- `src/nlp/` – traitement du texte :
-  - `extract_stations.py` extrait la gare de départ et la gare d’arrivée à partir d’une phrase en français, en utilisant des règles simples basées sur les noms de villes connus dans le CSV.
-- `src/graph/` – gestion du graphe :
-  - `load_graph.py` charge les stations et les arêtes depuis les fichiers CSV (`stations.csv`, `edges.csv`) et construit une structure de graphe en mémoire.
-  - `dijkstra.py` implémente l’algorithme de Dijkstra pour calculer le plus court chemin entre deux gares.
-- `src/pipeline.py` – orchestration :
-  - enchaîne l’extraction des gares, le chargement du graphe et l’appel à Dijkstra ;
-  - utilise actuellement une phrase d’exemple codée en dur pour valider la baseline.
+- `src/nlp/` – text processing:
+  - `extract_stations.py` extracts the departure station and arrival station from a sentence in French, using simple rules based on the names of cities known in the CSV.
+- `src/graph/` – graph management:
+  - `load_graph.py` loads stations and edges from CSV files (`stations.csv`, `edges.csv`) and builds a graph structure in memory.
+  - `dijkstra.py` implements Dijkstra's algorithm to calculate the shortest path between two stations.
+- `src/pipeline.py` – orchestration:
+  - chains together station extraction, graph loading, and the Dijkstra call;
+  - currently uses a hard-coded example sentence to validate the baseline.
 
-D’autres modules (`src/nlp/intent.py`, `src/io/input_text.py`) existent mais ne sont pas encore implémentés dans la baseline actuelle.
+Other modules (`src/nlp/intent.py`, `src/io/input_text.py`) exist but are not yet implemented in the current baseline.
 
-## Données
+## Data
 
-Le dossier `data/` contient les fichiers CSV utilisés par le pipeline :
+The `data/` folder contains the CSV files used by the pipeline:
 
-- `data/stations.csv` : liste de gares fictives (identifiant de gare et nom de ville) ;
-- `data/edges.csv` : liste d’arêtes entre gares avec une distance (poids).
+- `data/stations.csv`: list of fictitious stations (station ID and city name);
+- `data/edges.csv`: list of edges between stations with a distance (weight).
 
-Ces données :
+This data:
 
-- sont entièrement **fictives** ;
-- servent uniquement à vérifier que le pipeline de base fonctionne ;
-- pourront être remplacées plus tard par un jeu de données plus riche ou plus réaliste.
+- is entirely **fictitious**;
+- is used solely to verify that the basic pipeline is functioning;
+- may be replaced later by a richer or more realistic dataset.
 
-## Lancer la pipeline
+## Launching the pipeline
 
-### Prérequis
+### Prerequisites
 
-- Python **3.11** ou version supérieure.
+- Python **3.11** or higher.
 
-Aucune dépendance externe n’est nécessaire : le projet utilise uniquement la bibliothèque standard de Python.
+No external dependencies are required: the project only uses the standard Python library.
 
-### Commande
+### Command
 
-Depuis la racine du projet (`T-AIA-911-REN_4`), exécuter :
+From the project root (`T-AIA-911-REN_4`), run:
 
 ```bash
 python -m src.pipeline
 ```
 
-Cela lance le pipeline de démonstration avec la phrase d’exemple intégrée dans `src/pipeline.py`.
+This launches the demonstration pipeline with the example sentence included in `src/pipeline.py`.
 
-## Exemple de sortie
+## Example output
 
-Pour la phrase :
+For the sentence:
 
 > Je veux aller de Rennes à Toulouse
 
-une exécution typique donne :
+a typical execution gives:
 
 ```text
 Sentence: Je veux aller de Rennes à Toulouse
@@ -84,19 +84,27 @@ Shortest path: FR_RENNES -> FR_BABINIERE -> FR_TOULOUSE_MATABIAU
 Total distance: 562.0 km
 ```
 
-Les valeurs exactes dépendent uniquement des fichiers CSV fournis dans `data/`, qui sont conçus pour valider ce scénario de base.
+The exact values depend solely on the CSV files provided in `data/`, which are designed to validate this basic scenario.
 
-## État actuel du projet
+## Current status of the project
 
-À ce stade :
+At this stade :
 
-- le **pipeline baseline** est fonctionnel (chargement du graphe, extraction de gares sur phrases simples, calcul du plus court chemin) ;
-- la partie **NLP** est volontairement simple et **basée sur des règles** :
-  - recherche de noms de villes connus dans la phrase ;
-  - première ville trouvée = départ, deuxième ville = arrivée ;
-- l’objectif est d’**améliorer progressivement le NLP** et de **comparer plusieurs approches** (règles, modèles plus avancés, etc.), tout en gardant la même interface.
+- The **baseline pipeline** is functional (graph loading, station extraction from simple sentences, shortest path calculation).
+- The **NLP** part is deliberately simple and **rule-based**:
+  - Search for known city names in the sentence.
+  - first city found = departure, second city = arrival;
+- the objective is to **gradually improve the NLP** and **compare several approaches** (rules, more advanced models, etc.), while keeping the same interface.
 
-Certains modules (détection d’intention, entrée texte générique, tests automatisés) sont encore à l’état de squelette et seront complétés dans les étapes suivantes du projet.
+Some modules (intention detection, generic text input, automated testing) are still in the skeleton stage and will be completed in subsequent stages of the project.
+
+## Run Tests on the Pipeline
+
+This command runs the test strategies that test the pipeline, the NLP and the path finder and generates a pdf file of the result.
+
+```bash
+pytest tests/test_strategies_evaluation.py -v
+```
 
 ## Quick Setup
 
@@ -189,14 +197,6 @@ Sorts and organizes imports.
 isort .
 ```
 
-### flake8 (Linter)
-
-Checks code for style issues and errors.
-
-```bash
-flake8 .
-```
-
 ### mypy (Type Checker)
 
 Performs static type checking.
@@ -222,7 +222,6 @@ It checks:
 
 - Code formatting (Black)
 - Import sorting (isort)
-- Linting (flake8)
 - Type checking (mypy)
 - Tests (pytest, if tests exist)
 
