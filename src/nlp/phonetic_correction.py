@@ -63,6 +63,23 @@ MANUAL_CORRECTIONS = {
     "bordo": "Bordeaux",
 }
 
+# Multi-word corrections (Whisper sometimes splits city names)
+MULTI_WORD_CORRECTIONS = {
+    "ville juif": "Villejuif",
+    "villejuive": "Villejuif",
+    "saint étienne": "Saint-Étienne",
+    "saint etienne": "Saint-Étienne",
+    "le havre": "Le Havre",
+    "le mans": "Le Mans",
+    "la rochelle": "La Rochelle",
+    "clermont ferrand": "Clermont-Ferrand",
+    "aix en provence": "Aix-en-Provence",
+    "brive la gaillarde": "Brive-la-Gaillarde",
+    "chalon sur saône": "Chalon-sur-Saône",
+    "chalon sur saone": "Chalon-sur-Saône",
+    "mont de marsan": "Mont-de-Marsan",
+}
+
 # Cache for city names loaded from CSV
 _CITY_NAMES: Optional[List[str]] = None
 
@@ -244,8 +261,14 @@ def correct_city_names(text: str) -> str:
     if not has_context:
         return text
 
+    # Apply multi-word corrections first (e.g., "Ville Juif" -> "Villejuif")
+    corrected = text
+    for wrong, correct in MULTI_WORD_CORRECTIONS.items():
+        pattern = re.compile(re.escape(wrong), re.IGNORECASE)
+        corrected = pattern.sub(correct, corrected)
+
     cities = _load_city_names()
-    text_lower = text.lower()
+    text_lower = corrected.lower()
 
     # Find multi-word city names that already exist in text
     # to avoid correcting their parts (e.g., "Mans" in "Le Mans")
@@ -260,12 +283,10 @@ def correct_city_names(text: str) -> str:
                 for i in range(pos, pos + len(city_lower)):
                     protected_positions.add(i)
 
-    corrected = text
-
     # Track corrections to avoid multiple passes
     corrections = {}
 
-    for match in re.finditer(r"\b\w+\b", text):
+    for match in re.finditer(r"\b\w+\b", corrected):
         word = match.group()
         start_pos = match.start()
 
