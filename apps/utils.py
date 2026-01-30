@@ -1,8 +1,15 @@
+import os
+import sys
 from typing import Any, Dict
+
+# Add parent directory to path to import from src
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import spacy
 from geopy.extra.rate_limiter import RateLimiter
 from geopy.geocoders import Nominatim
+
+from src.nlp.extract_stations import find_nearest_station
 
 nlp = spacy.load("fr_core_news_md")
 nlp.add_pipe("eds.dates")
@@ -43,7 +50,8 @@ def extract_dates(text: str) -> list[str]:
 
 def extract_valid_cities(raw_places: list[str]) -> list[dict]:
     """
-    Géocode les lieux extraits et retourne ceux qui sont des villes valides
+    Géocode les lieux extraits et retourne ceux qui sont des villes valides.
+    Ajoute aussi le code de la station la plus proche.
     """
     cities = []
     for place in raw_places:
@@ -61,12 +69,24 @@ def extract_valid_cities(raw_places: list[str]) -> list[dict]:
         if not city_name:
             continue
 
+        lat = float(location.latitude)
+        lon = float(location.longitude)
+
+        # Find nearest train station
+        station_info = find_nearest_station(lat, lon)
+        station_code = station_info[0] if station_info else None
+        station_name = station_info[1] if station_info else None
+        station_distance = station_info[2] if station_info else None
+
         cities.append(
             {
                 "name": city_name,
-                "lat": float(location.latitude),
-                "lon": float(location.longitude),
+                "lat": lat,
+                "lon": lon,
                 "address": address,
+                "station_code": station_code,
+                "station_name": station_name,
+                "station_distance_km": station_distance,
             }
         )
     return cities
