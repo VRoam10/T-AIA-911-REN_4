@@ -111,11 +111,22 @@ def transcribe_file(audio_path: str) -> str:
         arr_station = route_info["destinations"][0].get("station_code") if route_info["destinations"] else None
 
         if dep_station and arr_station:
-            path, distance = dijkstra(GRAPH, dep_station, arr_station)
+            path, train_distance = dijkstra(GRAPH, dep_station, arr_station)
             if path:
                 path_str = " -> ".join(path)
+
+                # Calculate distances to/from stations
+                dep_to_station = route_info["depart"].get("station_distance_km", 0)
+                arr_to_station = route_info["destinations"][0].get("station_distance_km", 0)
+                total_distance = train_distance + dep_to_station + arr_to_station
+
                 header += f"🚆 Trajet ferroviaire: {path_str}\n"
-                header += f"   Distance totale: {distance} km\n\n"
+                header += f"   Distance train: {train_distance} km\n"
+                if dep_to_station > 1:  # Only show if > 1km
+                    header += f"   + {route_info['depart']['name']} → {route_info['depart'].get('station_name')}: {dep_to_station:.1f} km\n"
+                if arr_to_station > 1:  # Only show if > 1km
+                    header += f"   + {route_info['destinations'][0].get('station_name')} → {route_info['destinations'][0]['name']}: {arr_to_station:.1f} km\n"
+                header += f"   📊 Distance totale estimée: {total_distance:.1f} km\n\n"
             else:
                 header += f"🚆 Aucun trajet trouvé entre {dep_station} et {arr_station}\n\n"
         else:
