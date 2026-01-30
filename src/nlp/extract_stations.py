@@ -8,12 +8,23 @@ advanced techniques).
 """
 
 import csv
+import math
 import re
 import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+
+
+@dataclass
+class Station:
+    """A train station with its location."""
+
+    code: str
+    name: str
+    lat: float
+    lon: float
 
 
 @dataclass
@@ -44,6 +55,26 @@ def _canonicalize(text: str) -> str:
     normalized = normalized.lower()
     normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
     return normalized.strip()
+
+def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate the distance in km between two GPS coordinates.
+
+    Uses the Haversine formula for accurate distance on Earth's surface.
+    """
+    R = 6371  # Earth's radius in km
+
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+    delta_lat = math.radians(lat2 - lat1)
+    delta_lon = math.radians(lon2 - lon1)
+
+    a = (
+        math.sin(delta_lat / 2) ** 2
+        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    return R * c
 
 
 @lru_cache(maxsize=1)
@@ -82,6 +113,70 @@ def _load_stations() -> Dict[str, str]:
         return {}
 
     return stations
+
+
+@lru_cache(maxsize=1)
+def _load_stations_with_coords() -> List[Station]:
+    """Load stations with their GPS coordinates from the CSV file."""
+    project_root = Path(__file__).resolve().parents[2]
+    csv_path = project_root / "data" / "stations.csv"
+
+    stations: List[Station] = []
+    try:
+        with csv_path.open(encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                code = (row.get("station_id") or "").strip()
+                name = (row.get("station_name") or "").strip()
+                lat_str = (row.get("lat") or "").strip()
+                lon_str = (row.get("lon") or "").strip()
+                if not code or not name or not lat_str or not lon_str:
+                    continue
+                stations.append(
+                    Station(
+                        code=code,
+                        name=name,
+                        lat=float(lat_str),
+                        lon=float(lon_str),
+                    )
+                )
+    except (OSError, ValueError):
+        return []
+
+    return stations
+
+
+def find_nearest_station(lat: float, lon: float) -> Optional[Tuple[str, str, float]]:
+    """Find the nearest station to the given GPS coordinates.
+
+    Parameters
+    ----------
+    lat : float
+        Latitude of the location
+    lon : float
+        Longitude of the location
+
+    Returns
+    -------
+    Optional[Tuple[str, str, float]]
+        A tuple of (station_code, station_name, distance_km) or None if no stations
+    """
+    stations = _load_stations_with_coords()
+    if not stations:
+        return None
+
+    nearest = None
+    min_distance = float("inf")
+
+    for station in stations:
+        distance = _haversine_distance(lat, lon, station.lat, station.lon)
+        if distance < min_distance:
+            min_distance = distance
+            nearest = station
+
+    if nearest:
+        return (nearest.code, nearest.name, min_distance)
+    return None
 
 
 def _find_station_codes(sentence: str) -> Tuple[Optional[str], Optional[str]]:
