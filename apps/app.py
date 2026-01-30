@@ -14,7 +14,6 @@ from utils import (
 )
 from src.pipeline import solve_travel_order
 from src.nlp.intent import detect_intent, Intent
-# phonetic_correction removed - using French Whisper model instead
 from src.graph.load_graph import load_graph
 from src.graph.dijkstra import dijkstra
 from pathlib import Path
