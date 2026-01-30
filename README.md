@@ -106,6 +106,12 @@ This command runs the test strategies that test the pipeline, the NLP and the pa
 pytest tests/test_strategies_evaluation.py -v
 ```
 
+### Generate the dataset
+
+```bash
+pytest tests/data/generation.py
+```
+
 ## Quick Setup
 
 ### 1. Install Dependencies

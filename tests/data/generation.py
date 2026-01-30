@@ -48,11 +48,13 @@ def load_structures(path):
 
 
 def main():
-    cities = load_cities("cities.csv")
-    structures = load_structures("sentence_structures.csv")
+    cities = load_cities("tests/data/cities.csv")
+    structures = load_structures("tests/data/sentence_structures.csv")
     city_keys = list(cities.keys())
 
-    with open("generated_sentences.csv", "w", newline="", encoding="utf-8") as f:
+    with open(
+        "tests/data/generated_sentences.csv", "w", newline="", encoding="utf-8"
+    ) as f:
         writer = csv.writer(f)
         writer.writerow(["sentenceID", "sentence", "expected_output"])
 
