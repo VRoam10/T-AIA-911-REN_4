@@ -13,7 +13,7 @@ modules.
 """
 
 from pathlib import Path
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict, Optional, Tuple, Union
 
 from .graph.dijkstra import dijkstra
 from .graph.load_graph import Graph, load_graph
@@ -21,7 +21,8 @@ from .nlp.extract_stations import StationExtractionResult, extract_stations
 from .nlp.intent import Intent, detect_intent
 
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
 STATIONS_CSV = DATA_DIR / "stations.csv"
 EDGES_CSV = DATA_DIR / "edges.csv"
 
@@ -32,10 +33,13 @@ PathFinder = Callable[[Graph, str, str], Tuple[list[str], float]]
 
 NLP_STRATEGIES: Dict[str, StationExtractor] = {
     "rule_based": extract_stations,
+    #  "spacy": spacy,
+    #  "model_encoder"
 }
 
 PATH_FINDER_STRATEGIES: Dict[str, PathFinder] = {
     "dijkstra": dijkstra,
+    # "dijkstra": dijkstra2,
 }
 
 
@@ -43,6 +47,9 @@ def solve_travel_order(
     sentence: str,
     nlp_name: str = "rule_based",
     path_name: str = "dijkstra",
+    *,
+    generate_map: bool = True,
+    map_output_html: Optional[Union[str, Path]] = None,
 ) -> str:
     """Run the core pipeline on a given sentence and return a message.
 
@@ -85,8 +92,23 @@ def solve_travel_order(
     if not path:
         return f"No path found between {departure} and {arrival}."
 
+    map_message = ""
+    if generate_map:
+        try:
+            from .viz.map import plot_path
+
+            output_path = (
+                Path(map_output_html)
+                if map_output_html is not None
+                else PROJECT_ROOT / "trajectory.html"
+            )
+            plot_path(path, STATIONS_CSV, output_path)
+            map_message = f"\nMap saved to: {output_path}"
+        except Exception as exc:
+            map_message = f"\nMap generation failed: {exc}"
+
     path_str = " -> ".join(path)
-    return f"Shortest path: {path_str}\nTotal distance: {distance} km"
+    return f"Shortest path: {path_str}\nTotal distance: {distance} km{map_message}"
 
 
 def run_pipeline() -> None:

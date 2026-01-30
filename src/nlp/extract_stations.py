@@ -10,6 +10,7 @@ advanced techniques).
 import csv
 import math
 import re
+import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -47,6 +48,14 @@ class StationExtractionResult:
     error: Optional[str]
 
 
+def _canonicalize(text: str) -> str:
+    """Normalize text for matching (remove accents/punctuation)."""
+    normalized = unicodedata.normalize("NFD", text)
+    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    normalized = normalized.lower()
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    return normalized.strip()
+
 def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate the distance in km between two GPS coordinates.
 
@@ -72,11 +81,10 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
 def _load_stations() -> Dict[str, str]:
     """Load station names and identifiers from the CSV file.
 
-    The CSV is expected to live in the project-level ``data`` directory.
-    The keys of the returned mapping are lowercased station names, and
-    the values are their corresponding identifiers.
+    The CSV lives in ``data/`` at the project root. The mapping keys are
+    canonicalized strings (station name or city name without accents and
+    punctuation) so the NLP layer can match more natural phrases.
     """
-    # ``.../src/nlp/extract_stations.py`` -> project root via parents[2]
     project_root = Path(__file__).resolve().parents[2]
     csv_path = project_root / "data" / "stations.csv"
 
@@ -87,11 +95,21 @@ def _load_stations() -> Dict[str, str]:
             for row in reader:
                 code = (row.get("station_id") or "").strip()
                 name = (row.get("station_name") or "").strip()
-                if not code or not name:
+                city = (row.get("city") or "").strip()
+
+                if not code:
                     continue
-                stations[name.lower()] = code
+
+                if name:
+                    key = _canonicalize(name)
+                    if key:
+                        stations[key] = code
+
+                if city:
+                    key = _canonicalize(city)
+                    if key:
+                        stations[key] = code
     except OSError:
-        # If the file cannot be read, fall back to an empty mapping.
         return {}
 
     return stations
@@ -164,16 +182,15 @@ def find_nearest_station(lat: float, lon: float) -> Optional[Tuple[str, str, flo
 def _find_station_codes(sentence: str) -> Tuple[Optional[str], Optional[str]]:
     """Return (departure_code, arrival_code) detected in the sentence.
 
-    The strategy is intentionally simple: it scans the sentence for
-    occurrences of known station names (as whole words) and takes the
-    first match as departure and the second as arrival.
+    The strategy scans a canonicalized version of the sentence and looks
+    for whole-word matches against the precomputed station keys.
     """
-    text = sentence.lower()
+    text = _canonicalize(sentence)
     stations = _load_stations()
 
     matches: list[Tuple[int, str]] = []
-    for name, code in stations.items():
-        pattern = r"\b{}\b".format(re.escape(name))
+    for normalized_name, code in stations.items():
+        pattern = r"\b{}\b".format(re.escape(normalized_name))
         match = re.search(pattern, text)
         if match:
             matches.append((match.start(), code))
