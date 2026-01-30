@@ -4,6 +4,7 @@ import sys
 import tempfile
 import threading
 import time
+import html
 from pathlib import Path
 
 import gradio as gr
@@ -44,6 +45,22 @@ except Exception as e:
 # HELPERS
 # ============================
 
+def _map_iframe_from_html(document_html: str, *, height_px: int = 520) -> str:
+    escaped = html.escape(document_html, quote=True)
+    return (
+        f'<iframe srcdoc="{escaped}" '
+        f'style="width: 100%; height: {height_px}px; border: 0;" '
+        f'loading="lazy"></iframe>'
+    )
+
+
+def _extract_map_error(message: str) -> str:
+    marker = "Map generation failed:"
+    idx = message.find(marker)
+    if idx == -1:
+        return ""
+    return message[idx:].strip()
+
 
 def format_ts(seconds, vtt=False):
     ms = int(seconds * 1000)
@@ -81,7 +98,7 @@ def write_vtt(segments):
 
 def transcribe_file(audio_path):
     if not audio_path:
-        return "No audio", None, None, None
+        return "No audio", "<p>No map</p>"
 
     segments_gen, info = model.transcribe(
         audio_path,
@@ -100,25 +117,21 @@ def transcribe_file(audio_path):
 
     tmp = tempfile.mkdtemp()
 
-    txt_path = os.path.join(tmp, "transcript.txt")
-    srt_path = os.path.join(tmp, "subtitles.srt")
-    vtt_path = os.path.join(tmp, "subtitles.vtt")
-
-    with open(txt_path, "w", encoding="utf-8") as f:
-        f.write(full_text.strip())
-
-    with open(srt_path, "w", encoding="utf-8") as f:
-        f.write(write_srt(segments))
-
-    with open(vtt_path, "w", encoding="utf-8") as f:
-        f.write(write_vtt(segments))
+    map_path = os.path.join(tmp, "trajectory.html")
 
     header = (
         f"🌍 Langue détectée: {info.language} ({info.language_probability:.2f})\n\n"
     )
-    analysis = solve_travel_order(full_text.strip())
+    analysis = solve_travel_order(full_text.strip(), map_output_html=map_path)
     combined_text = header + full_text.strip() + "\n\n" + analysis
-    return combined_text, txt_path, srt_path, vtt_path
+    try:
+        with open(map_path, "r", encoding="utf-8") as f:
+            map_html = _map_iframe_from_html(f.read())
+    except OSError:
+        err = _extract_map_error(analysis)
+        map_html = f"<pre>{html.escape(err or 'No map')}</pre>"
+
+    return combined_text, map_html
 
 
 # ============================
@@ -138,6 +151,8 @@ def live_transcribe():
     stop_event.clear()
     buffer = np.zeros((0, 1), dtype=np.float32)
     last_text = ""
+    tmp = tempfile.mkdtemp()
+    map_path = os.path.join(tmp, "trajectory.html")
 
     with sd.InputStream(
         samplerate=SAMPLE_RATE, channels=1, dtype="float32", callback=audio_callback
@@ -163,8 +178,15 @@ def live_transcribe():
                     text = text.strip()
                     if text and text != last_text:
                         last_text = text
-                        analysis = solve_travel_order(text)
-                        yield text + "\n\n" + analysis
+                        analysis = solve_travel_order(text, map_output_html=map_path)
+                        try:
+                            with open(map_path, "r", encoding="utf-8") as f:
+                                map_html = _map_iframe_from_html(f.read())
+                        except OSError:
+                            err = _extract_map_error(analysis)
+                            map_html = f"<pre>{html.escape(err or 'No map')}</pre>"
+
+                        yield text + "\n\n" + analysis, map_html
 
                     time.sleep(STEP_SECONDS)
 
@@ -174,51 +196,37 @@ def live_transcribe():
 
 def stop_live():
     stop_event.set()
-    return "⛔ Live stopped"
+    return "⛔ Live stopped", "<p></p>"
 
 
 # ============================
 # UI
 # ============================
 with gr.Blocks(title="Whisper • GPU • Live • SRT/VTT") as app:
-    gr.Markdown(
-        """
-# 🎤 Whisper — Fast • GPU • Live
-
-### 📂 Fichier audio
-✔ Auto langue
-✔ VAD
-✔ TXT / SRT / VTT
-
-### 🎙️ Micro en direct
-✔ Buffer circulaire
-✔ Quasi temps réel
-✔ GPU / CPU fallback
-"""
-    )
+    gr.Markdown("""
+# 🎤 Travel Order Resolver
+""")
 
     # ---- File mode
     audio_file = gr.Audio(type="filepath", label="🎧 Audio file")
     btn_file = gr.Button("🚀 Transcribe file")
 
     output_file = gr.Textbox(label="📝 Transcription", lines=10)
+    map_file = gr.HTML(value="<p></p>")
 
-    with gr.Row():
-        txt = gr.File(label="TXT")
-        srt = gr.File(label="SRT")
-        vtt = gr.File(label="VTT")
+    btn_file.click(transcribe_file, audio_file, [output_file, map_file])
 
-    btn_file.click(transcribe_file, audio_file, [output_file, txt, srt, vtt])
+    # gr.Markdown("## 🎙️ Live microphone")
 
-    gr.Markdown("## 🎙️ Live microphone")
+    # with gr.Row():
+    #     live_output = gr.Textbox(label="📝 Live transcription", lines=6)
+    #     live_map = gr.HTML(value="<p></p>")
 
-    live_output = gr.Textbox(label="📝 Live transcription", lines=6)
+    # start_btn = gr.Button("▶️ Start live")
+    # stop_btn = gr.Button("⛔ Stop live")
 
-    start_btn = gr.Button("▶️ Start live")
-    stop_btn = gr.Button("⛔ Stop live")
-
-    start_btn.click(live_transcribe, outputs=live_output)
-    stop_btn.click(stop_live, outputs=live_output)
+    # start_btn.click(live_transcribe, outputs=[live_output, live_map])
+    # stop_btn.click(stop_live, outputs=[live_output, live_map])
 
 # Work around Gradio api_info JSON schema bug
 try:
