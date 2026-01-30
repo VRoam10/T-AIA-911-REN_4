@@ -74,16 +74,14 @@ Cela lance le pipeline de démonstration avec la phrase d’exemple intégrée d
 
 Pour la phrase :
 
-> Je veux aller de Paris à Marseille
+> Je veux aller de Rennes à Toulouse
 
 une exécution typique donne :
 
 ```text
-Sentence: Je veux aller de Paris à Marseille
-Departure: PAR
-Arrival: MAR
-Shortest path: PAR -> DIJ -> LYO -> MAR
-Total distance: 835.0 km
+Sentence: Je veux aller de Rennes à Toulouse
+Shortest path: FR_RENNES -> FR_BABINIERE -> FR_TOULOUSE_MATABIAU
+Total distance: 562.0 km
 ```
 
 Les valeurs exactes dépendent uniquement des fichiers CSV fournis dans `data/`, qui sont conçus pour valider ce scénario de base.

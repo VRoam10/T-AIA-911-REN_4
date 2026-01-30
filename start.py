@@ -25,14 +25,19 @@ def main() -> None:
         script_name = "apps/app.py"
     else:
         print("Choix non reconnu, je pars sur Mac (app-mac.py).")
-        script_name = "app-mac.py"
+        script_name = "apps/app-mac.py"
 
     script_path = project_root / script_name
     if not script_path.exists():
         print(f"Impossible de trouver {script_name} à la racine du projet.")
         sys.exit(1)
 
-    cmd = [sys.executable, str(script_path)]
+    venv_python = project_root / ".venv" / "bin" / "python"
+    if not venv_python.exists():
+        venv_python = project_root / ".venv" / "Scripts" / "python.exe"
+
+    python_exe = str(venv_python) if venv_python.exists() else sys.executable
+    cmd = [python_exe, str(script_path)]
     print(f"Lancement de {script_name} avec : {' '.join(cmd)}")
     subprocess.run(cmd, check=False)
 

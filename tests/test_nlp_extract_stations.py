@@ -9,13 +9,13 @@ def test_extract_stations_empty_sentence():
 
 
 def test_extract_stations_simple_order():
-    sentence = "Je veux aller de Rennes à Toulouse"
+    sentence = "Je veux aller de Rennes à Toulouse Matabiau"
     result = extract_stations(sentence)
 
     assert isinstance(result, StationExtractionResult)
-    # Rennes and Toulouse exist in stations.csv with codes REN and TLS.
-    assert result.departure == "REN"
-    assert result.arrival == "TLS"
+    # Rennes et Toulouse Matabiau existent dans stations.csv avec leurs codes FR_*.
+    assert result.departure == "FR_RENNES"
+    assert result.arrival == "FR_TOULOUSE_MATABIAU"
     assert result.error is None
 
 
@@ -25,4 +25,3 @@ def test_extract_stations_unknown_city():
 
     assert result.departure is None or result.arrival is None
     assert result.error == "Could not detect both departure and arrival stations."
-
