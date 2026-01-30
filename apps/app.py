@@ -23,23 +23,43 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 GRAPH = load_graph(str(DATA_DIR / "stations.csv"), str(DATA_DIR / "edges.csv"))
 
 # ============================ CONFIG ============================
-MODEL_SIZE = "small"  # small / medium / large-v3
-DEVICE = "cuda"  # cuda or cpu
-COMPUTE_TYPE = "float16"
+DEFAULT_DEVICE = "cuda"  # cuda or cpu
+DEFAULT_COMPUTE = "float16"
 
-# ============================ LOAD MODEL ============================
-print("🔄 Loading Whisper model...")
-try:
-    model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
-    print("✅ GPU model loaded")
-except Exception as e:
-    print("⚠️ GPU failed, fallback to CPU:", e)
-    model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
+# Liste de modèles testables (ta base + des FR CT2 HF)
+MODEL_CHOICES = [
+    "small",
+    "medium",
+    "large-v3",
+    "bofenghuang/whisper-large-v2-cv11-french-ct2",
+    "brandenkmurray/faster-whisper-large-v3-french-distil-dec16",
+]
+
+# Cache pour éviter de recharger un modèle déjà chargé
+MODEL_CACHE: dict[tuple[str, str, str], WhisperModel] = {}
 
 
-def transcribe_file(audio_path: str) -> str:
+def get_model(model_id: str, device: str, compute_type: str) -> WhisperModel:
+    key = (model_id, device, compute_type)
+    if key in MODEL_CACHE:
+        return MODEL_CACHE[key]
+
+    # Tentative GPU, fallback CPU si souci
+    try:
+        m = WhisperModel(model_id, device=device, compute_type=compute_type)
+    except Exception as e:
+        print(f"⚠️ Failed loading {model_id} on {device}/{compute_type}: {e}")
+        m = WhisperModel(model_id, device="cpu", compute_type="int8")
+
+    MODEL_CACHE[key] = m
+    return m
+
+
+def transcribe_file(audio_path: str, model_id: str) -> str:
     if not audio_path:
         return "❌ Aucun fichier audio"
+
+    model = get_model(model_id, DEFAULT_DEVICE, DEFAULT_COMPUTE)
 
     segments_gen, info = model.transcribe(
         audio_path,
@@ -55,15 +75,12 @@ def transcribe_file(audio_path: str) -> str:
         f"{format_ts(seg.start)} --> {format_ts(seg.end)}\n{seg.text.strip()}\n"
         for seg in segments
     ]
-
     full_text = "\n".join(output)
 
     # Extract plain text without timestamps for intent detection
     plain_text = " ".join([seg.text.strip() for seg in segments])
 
-    header = (
-        f"🌍 Langue détectée: {info.language} ({info.language_probability:.2f})\n\n"
-    )
+    header = f"🧠 Modèle: {model_id}\n🌍 Langue détectée: {info.language} ({info.language_probability:.2f})\n\n"
 
     # Detect intent and compute route if applicable
     intent = detect_intent(plain_text)
@@ -138,27 +155,27 @@ def transcribe_file(audio_path: str) -> str:
                     f"  {idx}. Destination : {dest['name']}{station_info}\n"
                 )
 
-    if route_info["dates"]:
+    if route_info.get("dates"):
         header += "📅 Dates détectées : " + ", ".join(route_info["dates"]) + "\n\n"
 
     return header + full_text
 
 
 # ============================ UI ============================
-with gr.Blocks(title="Whisper GPU • SRT style text") as app:
+with gr.Blocks(title="Whisper • SRT style text") as app:
     gr.Markdown(
         """
 # 🎧 Whisper – Transcription avec timestamps
 ✔ Détection automatique de la langue
-✔ GPU / CPU fallback
+✔ Sélection de modèle (base + FR fine-tunés CT2)
 """
     )
 
+    model_dd = gr.Dropdown(MODEL_CHOICES, value="small", label="🧠 Modèle")
     audio_file = gr.Audio(type="filepath", label="🎵 Fichier audio")
     btn = gr.Button("🚀 Transcrire")
-
     output = gr.Textbox(label="📝 Transcription", lines=18)
 
-    btn.click(transcribe_file, audio_file, output)
+    btn.click(transcribe_file, inputs=[audio_file, model_dd], outputs=output)
 
 app.launch()
