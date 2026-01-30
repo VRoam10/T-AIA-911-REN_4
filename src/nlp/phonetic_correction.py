@@ -244,15 +244,37 @@ def correct_city_names(text: str) -> str:
     if not has_context:
         return text
 
+    cities = _load_city_names()
+    text_lower = text.lower()
+
+    # Find multi-word city names that already exist in text
+    # to avoid correcting their parts (e.g., "Mans" in "Le Mans")
+    protected_positions = set()
+    for city in cities:
+        city_lower = city.lower()
+        if " " in city_lower:
+            # Multi-word city name
+            pos = text_lower.find(city_lower)
+            if pos != -1:
+                # Mark all character positions as protected
+                for i in range(pos, pos + len(city_lower)):
+                    protected_positions.add(i)
+
     corrected = text
-    words = re.findall(r"\b\w+\b", text)
 
     # Track corrections to avoid multiple passes
     corrections = {}
 
-    for word in words:
+    for match in re.finditer(r"\b\w+\b", text):
+        word = match.group()
+        start_pos = match.start()
+
         # Skip very short words (less than 3 characters)
         if len(word) < 3:
+            continue
+
+        # Skip if this word is part of a protected multi-word city name
+        if start_pos in protected_positions:
             continue
 
         # Check if this word is close to a city name

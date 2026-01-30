@@ -15,6 +15,13 @@ from utils import (
 from src.pipeline import solve_travel_order
 from src.nlp.intent import detect_intent, Intent
 from src.nlp.phonetic_correction import correct_city_names
+from src.graph.load_graph import load_graph
+from src.graph.dijkstra import dijkstra
+from pathlib import Path
+
+# Load graph for direct route calculation
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+GRAPH = load_graph(str(DATA_DIR / "stations.csv"), str(DATA_DIR / "edges.csv"))
 
 # ============================ CONFIG ============================
 MODEL_SIZE = "small"  # small / medium / large-v3
@@ -72,10 +79,7 @@ def transcribe_file(audio_path: str) -> str:
     intent = detect_intent(corrected_text)
     header += f"🤖 Intent détecté: {intent.name}\n\n"
 
-    if intent == Intent.TRIP:
-        route_result = solve_travel_order(corrected_text)
-        header += f"🚆 {route_result}\n\n"
-    elif intent == Intent.NOT_FRENCH:
+    if intent == Intent.NOT_FRENCH:
         header += "❌ Désolé, je ne traite que les demandes en français.\n\n"
     elif intent == Intent.NOT_TRIP:
         header += "❌ Désolé, votre demande n'est pas une demande de voyage.\n"
@@ -84,31 +88,53 @@ def transcribe_file(audio_path: str) -> str:
         header += "❌ Désolé, je n'ai pas compris votre demande.\n"
         header += "   Assurez-vous que votre message n'est pas vide.\n\n"
 
+    # Extract cities with GPS coordinates and nearest stations
     locations = extract_locations(corrected_text)
     valid_cities = extract_valid_cities(locations)
 
     if valid_cities:
         header += "📍 Lieux détectés :\n"
         for city in valid_cities:
+            station_info = ""
+            if city.get("station_name"):
+                station_info = f" → Gare: {city['station_name']} ({city['station_distance_km']:.1f} km)"
             header += (
-                f"- {city['name']} (lat: {city['lat']:.5f}, lon: {city['lon']:.5f})\n"
+                f"- {city['name']} (lat: {city['lat']:.5f}, lon: {city['lon']:.5f}){station_info}\n"
             )
-            for k, v in city["address"].items():
-                header += f"    {k}: {v}\n"
         header += "\n"
 
     route_info = extract_departure_and_destinations(corrected_text, valid_cities)
 
+    # Calculate train route if we have departure and destination
+    if intent == Intent.TRIP and route_info["depart"] and route_info["destinations"]:
+        dep_station = route_info["depart"].get("station_code")
+        arr_station = route_info["destinations"][0].get("station_code") if route_info["destinations"] else None
+
+        if dep_station and arr_station:
+            path, distance = dijkstra(GRAPH, dep_station, arr_station)
+            if path:
+                path_str = " -> ".join(path)
+                header += f"🚆 Trajet ferroviaire: {path_str}\n"
+                header += f"   Distance totale: {distance} km\n\n"
+            else:
+                header += f"🚆 Aucun trajet trouvé entre {dep_station} et {arr_station}\n\n"
+        else:
+            header += "🚆 Impossible de trouver les gares correspondantes\n\n"
+    elif intent == Intent.TRIP:
+        header += "🚆 Impossible de détecter le départ et/ou la destination\n\n"
+
     if route_info["depart"] or route_info["destinations"]:
         header += "🧭 Itinéraire :\n"
         if route_info["depart"]:
-            header += f"- Départ : {route_info['depart']['name']}\n"
+            dep = route_info["depart"]
+            station_info = f" (Gare: {dep.get('station_name', 'N/A')})" if dep.get("station_name") else ""
+            header += f"- Départ : {dep['name']}{station_info}\n"
 
         if route_info["destinations"]:
             for idx, dest in enumerate(route_info["destinations"], 1):
+                station_info = f" (Gare: {dest.get('station_name', 'N/A')})" if dest.get("station_name") else ""
                 header += (
-                    f"  {idx}. Destination : {dest['name']} "
-                    f"(lat: {dest['lat']:.5f}, lon: {dest['lon']:.5f})\n"
+                    f"  {idx}. Destination : {dest['name']}{station_info}\n"
                 )
 
     if route_info["dates"]:
