@@ -1,13 +1,17 @@
+"""Graph loading and shortest-path behavior tests."""
+
 import math
 from pathlib import Path
 
 from src.graph.dijkstra import dijkstra
 from src.graph.load_graph import Graph, load_graph
 
+# Shared data fixtures for graph loading.
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 
 def test_load_graph_contains_all_stations():
+    """All station IDs from the CSV should exist as graph nodes."""
     stations_csv = DATA_DIR / "stations.csv"
     edges_csv = DATA_DIR / "edges.csv"
 
@@ -23,7 +27,8 @@ def test_load_graph_contains_all_stations():
 
 
 def test_dijkstra_finds_direct_edge():
-    # Minimal graph with a direct edge A -> B
+    """Direct edge case: A -> B should be used when it exists."""
+    # Minimal graph with a direct edge A -> B.
     graph: Graph = {
         "A": [("B", 10.0)],
         "B": [],
@@ -36,7 +41,8 @@ def test_dijkstra_finds_direct_edge():
 
 
 def test_dijkstra_chooses_shortest_path():
-    # Graph where A can reach C directly, but A->B->C is shorter
+    """Prefer the cheaper multi-hop path over a longer direct edge."""
+    # Graph where A can reach C directly, but A->B->C is shorter.
     graph: Graph = {
         "A": [("B", 3.0), ("C", 10.0)],
         "B": [("C", 4.0)],
@@ -50,6 +56,7 @@ def test_dijkstra_chooses_shortest_path():
 
 
 def test_dijkstra_no_path_returns_inf():
+    """No path should return an empty path and infinite distance."""
     graph: Graph = {
         "A": [],
         "B": [],

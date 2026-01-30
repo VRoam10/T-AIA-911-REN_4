@@ -1,10 +1,10 @@
-"""Tests for travel request detection."""
+"""Tests for travel request detection and intent classification."""
 
 import pytest
 
 from src.nlp.intent import Intent, _is_travel_request, detect_intent
 
-# Test cases for travel requests
+# Test cases for travel requests.
 TRAVEL_REQUESTS = [
     # Basic travel requests
     "Comment aller à Paris ?",
@@ -40,7 +40,7 @@ TRAVEL_REQUESTS = [
     "Indiquez-moi la route pour Versailles",
 ]
 
-# Test cases for non-travel requests
+# Test cases for non-travel requests.
 NON_TRAVEL_REQUESTS = [
     "Bonjour, comment ça va ?",
     "Quel temps fait-il à Paris ?",

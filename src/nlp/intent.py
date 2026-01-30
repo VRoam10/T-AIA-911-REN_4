@@ -133,11 +133,15 @@ def _is_french(text: str, min_confidence: float = 0.8) -> bool:
             if len(text) < 15:
                 extended_text = f"{text} {text} {text}"
                 lang = detect(extended_text)
-                return bool(lang == "fr")
+                if lang == "fr":
+                    return True
+                return _basic_french_detection(text)
 
             # For longer texts, use direct detection
             lang = detect(text)
-            return bool(lang == "fr")
+            if lang == "fr":
+                return True
+            return _basic_french_detection(text)
         except (LangDetectException, Exception):
             pass
 
@@ -208,6 +212,8 @@ def _basic_french_detection(text: str) -> bool:
         "quand",
         "comment",
         "pourquoi",
+        "depuis",
+        "vers",
         # Common verbs (conjugated forms)
         "suis",
         "es",
@@ -311,15 +317,103 @@ def _basic_french_detection(text: str) -> bool:
     if not words:
         return False
 
+    french_function_words = {
+        "le",
+        "la",
+        "les",
+        "un",
+        "une",
+        "des",
+        "du",
+        "de",
+        "d'",
+        "au",
+        "aux",
+        "à",
+        "et",
+        "est",
+        "dans",
+        "pour",
+        "avec",
+        "sur",
+        "par",
+        "sans",
+        "sous",
+        "chez",
+        "je",
+        "tu",
+        "il",
+        "elle",
+        "nous",
+        "vous",
+        "ils",
+        "elles",
+        "ce",
+        "cet",
+        "cette",
+        "ces",
+        "mon",
+        "ton",
+        "son",
+        "ma",
+        "ta",
+        "sa",
+        "mes",
+        "tes",
+        "ses",
+        "notre",
+        "votre",
+        "leur",
+        "nos",
+        "vos",
+        "leurs",
+        "qui",
+        "que",
+        "quoi",
+        "où",
+        "quand",
+        "comment",
+        "pourquoi",
+        "depuis",
+        "vers",
+    }
+
     # Count French words and check for common patterns
     french_word_count = len(words.intersection(french_indicators))
 
+    # If there are no French-specific characters, require either a function word
+    # or strong French travel terms to avoid English false positives.
+    french_travel_terms = {
+        "trajet",
+        "itineraire",
+        "itinéraire",
+        "gare",
+        "arrêt",
+        "arret",
+        "aéroport",
+        "aeroport",
+    }
+    if not has_french_chars and not words.intersection(
+        french_function_words.union(french_travel_terms)
+    ):
+        return False
+
     # Special case for very short texts (1-3 words)
     if len(words) <= 3:
-        # For very short texts, require at least one French word or character
-        return has_french_chars or french_word_count >= 1
+        # For very short texts, require at least one French word, character, or strong travel term
+        return bool(
+            has_french_chars
+            or french_word_count >= 1
+            or words.intersection(french_function_words.union(french_travel_terms))
+        )
 
-    # For longer texts, be more lenient
+    # For longer texts, require a minimum density of French indicators
+    if len(words) >= 4:
+        if french_word_count < 2:
+            return False
+        if (french_word_count / len(words)) < 0.3:
+            return False
+
     min_required = max(1, len(words) // 5)  # Require at least 20% French words
     return has_french_chars or french_word_count >= min_required
 
