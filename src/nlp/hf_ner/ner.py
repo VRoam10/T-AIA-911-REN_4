@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Any, Optional, Tuple
-
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 from transformers import pipeline
 
@@ -99,8 +98,9 @@ def _get_pipe(model_id: str) -> Any:
         return _PIPELINES[model_id]
 
     try:
-        ner = pipeline("token-classification", model=model_id,
-                       aggregation_strategy="simple")
+        ner = pipeline(
+            "token-classification", model=model_id, aggregation_strategy="simple"
+        )
     except Exception as e:
         raise RuntimeError(
             f"HF NER init failed for {model_id}. "
@@ -163,8 +163,7 @@ def extract_stations_hf(sentence: str) -> StationExtractionResult:
         )
 
     locations = extract_locations_hf(sentence)
-    departure, arrival = _find_station_codes_from_locations(
-        sentence, locations)
+    departure, arrival = _find_station_codes_from_locations(sentence, locations)
 
     error: Optional[str] = None
     if departure is None or arrival is None:

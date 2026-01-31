@@ -1,1 +1,5 @@
-from .extractor import extract_locations_spacy, extract_dates_eds, extract_stations_spacy
+from .extractor import (
+    extract_dates_eds,
+    extract_locations_spacy,
+    extract_stations_spacy,
+)

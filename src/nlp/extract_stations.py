@@ -56,6 +56,7 @@ def _canonicalize(text: str) -> str:
     normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
     return normalized.strip()
 
+
 def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate the distance in km between two GPS coordinates.
 

@@ -138,30 +138,47 @@ def _analyze_text(
     arr_station: Optional[str] = None
 
     if intent == Intent.TRIP and route_info["depart"] and route_info["destinations"]:
-        dep_station = route_info["depart"].get("station_code")
-        arr_station = (
-            route_info["destinations"][0].get("station_code")
-            if route_info["destinations"]
-            else None
-        )
+        if "station_code" in route_info["depart"]:
+            dep_station = route_info["depart"]["station_code"]
+        if route_info["destinations"]:
+            first_dest = route_info["destinations"][0]
+            if "station_code" in first_dest:
+                arr_station = first_dest["station_code"]
 
         if dep_station and arr_station:
             path, train_distance = dijkstra(GRAPH, dep_station, arr_station)
             if path:
                 path_for_map = path
                 path_str = " -> ".join(path)
-                dep_to_station = route_info["depart"].get("station_distance_km", 0)
-                arr_to_station = route_info["destinations"][0].get(
-                    "station_distance_km", 0
+                dep_to_station = (
+                    route_info["depart"]["station_distance_km"]
+                    if "station_distance_km" in route_info["depart"]
+                    else 0.0
+                )
+                first_dest = route_info["destinations"][0]
+                arr_to_station = (
+                    first_dest["station_distance_km"]
+                    if "station_distance_km" in first_dest
+                    else 0.0
                 )
                 total_distance = train_distance + dep_to_station + arr_to_station
 
                 header += f"🚆 Trajet ferroviaire: {path_str}\n"
                 header += f"   Distance train: {train_distance} km\n"
                 if dep_to_station > 1:
-                    header += f"   + {route_info['depart']['name']} → {route_info['depart'].get('station_name')}: {dep_to_station:.1f} km\n"
+                    station_name = (
+                        route_info["depart"]["station_name"]
+                        if "station_name" in route_info["depart"]
+                        else "N/A"
+                    )
+                    header += f"   + {route_info['depart']['name']} → {station_name}: {dep_to_station:.1f} km\n"
                 if arr_to_station > 1:
-                    header += f"   + {route_info['destinations'][0].get('station_name')} → {route_info['destinations'][0]['name']}: {arr_to_station:.1f} km\n"
+                    dest_station_name = (
+                        first_dest["station_name"]
+                        if "station_name" in first_dest
+                        else "N/A"
+                    )
+                    header += f"   + {dest_station_name} → {first_dest['name']}: {arr_to_station:.1f} km\n"
                 header += f"   📊 Distance totale estimée: {total_distance:.1f} km\n\n"
             else:
                 header += (
@@ -177,18 +194,14 @@ def _analyze_text(
         if route_info["depart"]:
             dep = route_info["depart"]
             station_info = (
-                f" (Gare: {dep.get('station_name', 'N/A')})"
-                if dep.get("station_name")
-                else ""
+                f" (Gare: {dep['station_name']})" if "station_name" in dep else ""
             )
             header += f"- Départ : {dep['name']}{station_info}\n"
 
         if route_info["destinations"]:
             for idx, dest in enumerate(route_info["destinations"], 1):
                 station_info = (
-                    f" (Gare: {dest.get('station_name', 'N/A')})"
-                    if dest.get("station_name")
-                    else ""
+                    f" (Gare: {dest['station_name']})" if "station_name" in dest else ""
                 )
                 header += f"  {idx}. Destination : {dest['name']}{station_info}\n"
 

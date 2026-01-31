@@ -4,7 +4,10 @@ from typing import List
 
 import spacy
 
-from src.nlp.extract_stations import StationExtractionResult, extract_stations_from_locations
+from src.nlp.extract_stations import (
+    StationExtractionResult,
+    extract_stations_from_locations,
+)
 
 # Loads once at import time (heavy, but fast after)
 nlp = spacy.load("fr_core_news_md")

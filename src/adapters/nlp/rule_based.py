@@ -41,12 +41,8 @@ class RuleBasedStationExtractor:
             StationExtractionResult with departure, arrival, and metadata.
         """
         # Import here to leverage existing implementation
-        from ...nlp.extract_stations import (
-            extract_stations as legacy_extract,
-        )
-        from ...nlp.extract_stations import (
-            StationExtractionResult as LegacyResult,
-        )
+        from ...nlp.extract_stations import StationExtractionResult as LegacyResult
+        from ...nlp.extract_stations import extract_stations as legacy_extract
 
         legacy_result: LegacyResult = legacy_extract(sentence)
 

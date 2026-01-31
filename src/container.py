@@ -14,10 +14,8 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional, Type, TypeVar
-
+from typing import Any, Callable, Dict, Optional, TypeVar, cast
 from .config import AppConfig, get_config
-
 T = TypeVar("T")
 
 
@@ -41,15 +39,17 @@ class Container:
 
     config: AppConfig = field(default_factory=get_config)
 
-    _factories: Dict[Type, Callable[[], Any]] = field(default_factory=dict, repr=False)
-    _singletons: Dict[Type, Any] = field(default_factory=dict, repr=False)
-    _singleton_types: set[Type] = field(default_factory=set, repr=False)
+    _factories: Dict[type[Any], Callable[[], Any]] = field(
+        default_factory=dict, repr=False
+    )
+    _singletons: Dict[type[Any], Any] = field(default_factory=dict, repr=False)
+    _singleton_types: set[type[Any]] = field(default_factory=set, repr=False)
     _lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
 
     def register(
         self,
-        port_type: Type[T],
-        factory: Callable[[], T],
+        port_type: type[Any],
+        factory: Callable[[], Any],
         singleton: bool = True,
     ) -> None:
         """Register a factory for a port type.
@@ -64,7 +64,7 @@ class Container:
             if singleton:
                 self._singleton_types.add(port_type)
 
-    def resolve(self, port_type: Type[T]) -> T:
+    def resolve(self, port_type: type[Any]) -> Any:
         """Resolve an instance of a port type.
 
         Args:
@@ -87,7 +87,7 @@ class Container:
 
             return self._factories[port_type]()
 
-    def is_registered(self, port_type: Type) -> bool:
+    def is_registered(self, port_type: type[Any]) -> bool:
         """Check if a type is registered.
 
         Args:

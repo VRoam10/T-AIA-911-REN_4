@@ -107,7 +107,8 @@ class HuggingFaceNERAdapter:
 
             # Check if extraction was complete
             is_complete = (
-                legacy_result.departure is not None and legacy_result.arrival is not None
+                legacy_result.departure is not None
+                and legacy_result.arrival is not None
             )
 
             result = StationExtractionResult(

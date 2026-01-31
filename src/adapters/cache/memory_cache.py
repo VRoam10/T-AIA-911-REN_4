@@ -45,7 +45,7 @@ class InMemoryCache(Generic[T]):
     max_size: Optional[int] = None
     name: str = "cache"
 
-    _store: Dict[str, Tuple[Any, float]] = field(default_factory=dict, repr=False)
+    _store: Dict[str, Tuple[T, float]] = field(default_factory=dict, repr=False)
     _lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
     _logger: logging.Logger = field(init=False, repr=False)
 

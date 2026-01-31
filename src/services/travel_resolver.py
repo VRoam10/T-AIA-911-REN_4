@@ -148,8 +148,7 @@ class TravelResolverService:
             try:
                 # Resolve station details for map
                 stations_list = [
-                    self.graph_repository.get_station(code)
-                    for code in route.path
+                    self.graph_repository.get_station(code) for code in route.path
                 ]
                 stations = tuple(s for s in stations_list if s is not None)
 
@@ -215,7 +214,9 @@ class TravelResolverService:
             Formatted result string.
         """
         path_str = " -> ".join(route.path)
-        result = f"Shortest path: {path_str}\nTotal distance: {route.total_distance_km} km"
+        result = (
+            f"Shortest path: {path_str}\nTotal distance: {route.total_distance_km} km"
+        )
 
         if map_path:
             result += f"\nMap saved to: {map_path}"

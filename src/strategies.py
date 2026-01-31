@@ -1,7 +1,7 @@
 # strategies.py
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Literal, NotRequired, Optional, Tuple, TypedDict
 
 import requests
 from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
@@ -14,15 +14,16 @@ from src.nlp.legacy_spacy import extract_dates_eds, extract_locations_spacy
 
 # ===================== Types =====================
 
-CityDict = TypedDict(
-    "CityDict",
-    {
-        "name": str,
-        "lat": float,
-        "lon": float,
-        "address": Dict[str, Any],
-    },
-)
+
+class CityDict(TypedDict):
+    name: str
+    lat: float
+    lon: float
+    address: Dict[str, Any]
+    station_code: NotRequired[str]
+    station_name: NotRequired[str]
+    station_distance_km: NotRequired[float]
+
 
 RouteDict = TypedDict(
     "RouteDict",
@@ -54,7 +55,7 @@ geolocator.session = _session
 # RateLimiter: swallows exceptions so your app doesn't crash when Nominatim is down.
 geocode = RateLimiter(
     geolocator.geocode,
-    min_delay_seconds=1.0,      # be nice to the public endpoint
+    min_delay_seconds=1.0,  # be nice to the public endpoint
     max_retries=2,
     error_wait_seconds=2.0,
     swallow_exceptions=True,

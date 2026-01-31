@@ -150,7 +150,9 @@ class SpaCyNERAdapter:
         doc = nlp(text)
 
         # Extract LOC and GPE entities
-        locations = sorted({ent.text for ent in doc.ents if ent.label_ in ("LOC", "GPE")})
+        locations = sorted(
+            {ent.text for ent in doc.ents if ent.label_ in ("LOC", "GPE")}
+        )
 
         self._logger.debug(
             "Location extraction (SpaCy)",

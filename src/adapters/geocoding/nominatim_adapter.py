@@ -204,6 +204,10 @@ class NominatimGeocoderAdapter:
         except Exception as e:
             self._logger.warning(
                 "Reverse geocode failed",
-                extra={"lat": location.latitude, "lon": location.longitude, "error": str(e)},
+                extra={
+                    "lat": location.latitude,
+                    "lon": location.longitude,
+                    "error": str(e),
+                },
             )
             return None

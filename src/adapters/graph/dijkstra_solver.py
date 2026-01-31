@@ -149,9 +149,7 @@ class DijkstraRouteSolver:
             stations=resolved_stations,
         )
 
-    def _dijkstra(
-        self, graph: Graph, start: str, end: str
-    ) -> Tuple[List[str], float]:
+    def _dijkstra(self, graph: Graph, start: str, end: str) -> Tuple[List[str], float]:
         """Core Dijkstra algorithm implementation.
 
         This is a direct port of graph/dijkstra.py:14-73.

@@ -31,5 +31,7 @@ transformers
 dateparser
 tiktoken
 sentencepiece
-"transformers[sentencepiece]"
+transformers[sentencepiece]
 protobuf
+types-requests
+types-dateparser

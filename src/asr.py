@@ -1,9 +1,9 @@
 # asr.py
 from __future__ import annotations
 
-import time
 import logging
-from typing import Dict, Tuple, Optional, List, Iterable, Any
+import time
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from faster_whisper import WhisperModel
 
@@ -49,8 +49,7 @@ def get_audio_duration_seconds(audio_path: str) -> Optional[float]:
 def get_model(model_id: str, device: str, compute_type: str) -> WhisperModel:
     key = (model_id, device, compute_type)
     if key in MODEL_CACHE:
-        logger.info(
-            f"✅ Using cached model: {model_id} ({device}/{compute_type})")
+        logger.info(f"✅ Using cached model: {model_id} ({device}/{compute_type})")
         return MODEL_CACHE[key]
 
     logger.info(f"🔄 Loading model: {model_id} ({device}/{compute_type})")
@@ -89,8 +88,7 @@ def compute_rtf(elapsed: float, audio_s: Optional[float]) -> str:
 
 def format_benchmark_table(rows: List[dict]) -> str:
     lines = []
-    lines.append(
-        "| Model | Detected lang | Lang prob | Time (s) | Audio (s) | RTF |")
+    lines.append("| Model | Detected lang | Lang prob | Time (s) | Audio (s) | RTF |")
     lines.append("|---|---:|---:|---:|---:|---:|")
     for r in rows:
         audio_val = r["audio_s"] if r["audio_s"] is not None else "—"
@@ -171,8 +169,7 @@ def benchmark(
     total = len(model_ids)
     for i, mid in enumerate(model_ids, 1):
         if gradio_progress is not None:
-            gradio_progress((i - 1) / total,
-                            desc=f"Benchmark {i}/{total}: `{mid}`…")
+            gradio_progress((i - 1) / total, desc=f"Benchmark {i}/{total}: `{mid}`…")
 
         model = get_model(mid, device, compute_type)
 

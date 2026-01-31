@@ -58,8 +58,8 @@ class WhisperASRAdapter:
         CRITICAL FIX: Cache key uses actual device, not requested device.
         """
         model_id = model_id or self.config.default_model
-        requested_device = self.config.device
-        requested_compute = self.config.compute_type
+        requested_device: str = self.config.device
+        requested_compute: str = self.config.compute_type
 
         # Determine actual device
         if requested_device == "auto":
@@ -88,8 +88,8 @@ class WhisperASRAdapter:
 
         from faster_whisper import WhisperModel
 
-        actual_device = requested_device
-        actual_compute = requested_compute
+        actual_device: str = requested_device
+        actual_compute: str = requested_compute
 
         try:
             model = WhisperModel(

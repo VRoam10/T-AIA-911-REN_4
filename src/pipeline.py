@@ -19,9 +19,8 @@ from .graph.dijkstra import dijkstra
 from .graph.load_graph import Graph, load_graph
 from .nlp.extract_stations import StationExtractionResult, extract_stations
 from .nlp.hf_ner import extract_stations_hf
-from .nlp.legacy_spacy import extract_stations_spacy
 from .nlp.intent import Intent, detect_intent
-
+from .nlp.legacy_spacy import extract_stations_spacy
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"

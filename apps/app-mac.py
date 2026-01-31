@@ -1,10 +1,10 @@
+import html
 import os
 import queue
 import sys
 import tempfile
 import threading
 import time
-import html
 from pathlib import Path
 
 import gradio as gr
@@ -44,6 +44,7 @@ except Exception as e:
 # ============================
 # HELPERS
 # ============================
+
 
 def _map_iframe_from_html(document_html: str, *, height_px: int = 520) -> str:
     escaped = html.escape(document_html, quote=True)
@@ -203,9 +204,11 @@ def stop_live():
 # UI
 # ============================
 with gr.Blocks(title="Whisper • GPU • Live • SRT/VTT") as app:
-    gr.Markdown("""
+    gr.Markdown(
+        """
 # 🎤 Travel Order Resolver
-""")
+"""
+    )
 
     # ---- File mode
     audio_file = gr.Audio(type="filepath", label="🎧 Audio file")

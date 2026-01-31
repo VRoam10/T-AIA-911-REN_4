@@ -35,8 +35,8 @@ class RuleBasedIntentClassifier:
             Intent enum value (TRIP, NOT_TRIP, NOT_FRENCH, UNKNOWN).
         """
         # Import here to avoid circular imports and leverage existing implementation
-        from ...nlp.intent import detect_intent as legacy_detect_intent
         from ...nlp.intent import Intent as LegacyIntent
+        from ...nlp.intent import detect_intent as legacy_detect_intent
 
         legacy_intent = legacy_detect_intent(sentence)
 

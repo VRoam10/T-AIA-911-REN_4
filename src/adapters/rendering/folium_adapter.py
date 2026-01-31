@@ -76,7 +76,9 @@ class FoliumMapRenderer:
 
             # Add markers for each station
             for i, station in enumerate(stations):
-                icon_color = "green" if i == 0 else "red" if i == len(stations) - 1 else "blue"
+                icon_color = (
+                    "green" if i == 0 else "red" if i == len(stations) - 1 else "blue"
+                )
                 folium.Marker(
                     location=[station.location.latitude, station.location.longitude],
                     popup=f"{station.name} ({station.city})",
