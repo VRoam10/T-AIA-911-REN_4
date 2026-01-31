@@ -37,6 +37,11 @@ class NLPConfig(BaseSettings):
     hf_ner_dates_model: str = "Jean-Baptiste/camembert-ner-with-dates"
     spacy_model: str = "fr_core_news_md"
 
+    # Intent classification settings
+    intent_strategy: Literal["rule_based", "hf_xnli"] = "rule_based"
+    hf_intent_model: str = "joeddav/xlm-roberta-large-xnli"
+    intent_confidence_threshold: float = 0.5
+
 
 class ASRConfig(BaseSettings):
     """ASR-related configuration.

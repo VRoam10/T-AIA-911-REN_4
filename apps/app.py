@@ -1,9 +1,10 @@
 ﻿# -*- coding: utf-8 -*-
-import gradio as gr
 import html
 import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple
+
+import gradio as gr
 
 from src.asr import (
     benchmark,
@@ -17,9 +18,14 @@ from src.graph.dijkstra import dijkstra
 from src.graph.load_graph import load_graph
 from src.monitoring import clear_torch_cuda_cache, get_gpu_live_stats, log_gpu_memory
 from src.nlp.extract_stations import find_nearest_station
-from src.nlp.intent import Intent, detect_intent
+from src.nlp.intent import Intent, detect_intent, get_intent_classifier
 from src.pipeline import solve_travel_order
-from src.strategies import CityStrategy, DateStrategy, extract_departure_and_destinations, run_extraction
+from src.strategies import (
+    CityStrategy,
+    DateStrategy,
+    extract_departure_and_destinations,
+    run_extraction,
+)
 from src.viz.map import plot_path
 
 # Load graph for direct route calculation
@@ -41,6 +47,7 @@ MODEL_CHOICES: List[str] = [
 CITY_STRATEGIES: List[CityStrategy] = ["legacy_spacy", "hf_ner"]
 PIPELINE_STRATEGIES: List[str] = ["rule_based", "legacy_spacy", "hf_ner"]
 DATE_STRATEGIES: List[DateStrategy] = ["eds", "hf_ner"]
+INTENT_STRATEGIES: List[str] = ["rule_based", "hf_xnli"]
 
 LANG_CHOICES: List[str] = ["auto", "fr", "en"]
 BEAM_CHOICES: List[int] = [1, 2, 3, 4, 5]
@@ -80,6 +87,7 @@ def _analyze_text(
     city_strategy: CityStrategy,
     date_strategy: DateStrategy,
     pipeline_strategy: str,
+    intent_strategy: str = "rule_based",
     audio_meta: str = "",
 ) -> Tuple[str, str]:
     header = (
@@ -89,8 +97,9 @@ def _analyze_text(
         f"📅 Stratégie dates: {date_strategy}\n\n"
     )
 
-    intent = detect_intent(plain_text)
-    header += f"🤖 Intent détecté: {intent.name}\n\n"
+    classifier = get_intent_classifier(intent_strategy)
+    intent = classifier(plain_text)
+    header += f"🤖 Intent model: {intent_strategy} | Intent détecté: {intent.name}\n\n"
 
     if intent == Intent.NOT_FRENCH:
         header += "❌ Désolé, je ne traite que les demandes en français.\n\n"
@@ -120,9 +129,7 @@ def _analyze_text(
                 city["station_name"] = station_name
                 city["station_distance_km"] = station_distance_km
                 station_info = f" → Gare: {station_name} ({station_distance_km:.1f} km)"
-            header += (
-                f"- {city['name']} (lat: {city['lat']:.5f}, lon: {city['lon']:.5f}){station_info}\n"
-            )
+            header += f"- {city['name']} (lat: {city['lat']:.5f}, lon: {city['lon']:.5f}){station_info}\n"
         header += "\n"
 
     route_info = extract_departure_and_destinations(plain_text, valid_cities)
@@ -132,7 +139,11 @@ def _analyze_text(
 
     if intent == Intent.TRIP and route_info["depart"] and route_info["destinations"]:
         dep_station = route_info["depart"].get("station_code")
-        arr_station = route_info["destinations"][0].get("station_code") if route_info["destinations"] else None
+        arr_station = (
+            route_info["destinations"][0].get("station_code")
+            if route_info["destinations"]
+            else None
+        )
 
         if dep_station and arr_station:
             path, train_distance = dijkstra(GRAPH, dep_station, arr_station)
@@ -140,7 +151,9 @@ def _analyze_text(
                 path_for_map = path
                 path_str = " -> ".join(path)
                 dep_to_station = route_info["depart"].get("station_distance_km", 0)
-                arr_to_station = route_info["destinations"][0].get("station_distance_km", 0)
+                arr_to_station = route_info["destinations"][0].get(
+                    "station_distance_km", 0
+                )
                 total_distance = train_distance + dep_to_station + arr_to_station
 
                 header += f"🚆 Trajet ferroviaire: {path_str}\n"
@@ -151,7 +164,9 @@ def _analyze_text(
                     header += f"   + {route_info['destinations'][0].get('station_name')} → {route_info['destinations'][0]['name']}: {arr_to_station:.1f} km\n"
                 header += f"   📊 Distance totale estimée: {total_distance:.1f} km\n\n"
             else:
-                header += f"🚆 Aucun trajet trouvé entre {dep_station} et {arr_station}\n\n"
+                header += (
+                    f"🚆 Aucun trajet trouvé entre {dep_station} et {arr_station}\n\n"
+                )
         else:
             header += "🚆 Impossible de trouver les gares correspondantes\n\n"
     elif intent == Intent.TRIP:
@@ -161,12 +176,20 @@ def _analyze_text(
         header += "🧭 Itinéraire :\n"
         if route_info["depart"]:
             dep = route_info["depart"]
-            station_info = f" (Gare: {dep.get('station_name', 'N/A')})" if dep.get("station_name") else ""
+            station_info = (
+                f" (Gare: {dep.get('station_name', 'N/A')})"
+                if dep.get("station_name")
+                else ""
+            )
             header += f"- Départ : {dep['name']}{station_info}\n"
 
         if route_info["destinations"]:
             for idx, dest in enumerate(route_info["destinations"], 1):
-                station_info = f" (Gare: {dest.get('station_name', 'N/A')})" if dest.get("station_name") else ""
+                station_info = (
+                    f" (Gare: {dest.get('station_name', 'N/A')})"
+                    if dest.get("station_name")
+                    else ""
+                )
                 header += f"  {idx}. Destination : {dest['name']}{station_info}\n"
 
     dates_norm = extracted.get("dates_norm") or []
@@ -218,6 +241,7 @@ def transcribe_and_analyze(
     city_strategy: CityStrategy,
     date_strategy: DateStrategy,
     pipeline_strategy: str,
+    intent_strategy: str,
     progress: gr.Progress = gr.Progress(),
 ) -> Tuple[str, str]:
     if not audio_path:
@@ -250,6 +274,7 @@ def transcribe_and_analyze(
         city_strategy=city_strategy,
         date_strategy=date_strategy,
         pipeline_strategy=pipeline_strategy,
+        intent_strategy=intent_strategy,
         audio_meta=audio_meta,
     )
 
@@ -261,6 +286,7 @@ def analyze_text_input(
     city_strategy: CityStrategy,
     date_strategy: DateStrategy,
     pipeline_strategy: str,
+    intent_strategy: str,
 ) -> Tuple[str, str]:
     if not text or not text.strip():
         return "❌ Texte vide", "<p></p>"
@@ -271,6 +297,7 @@ def analyze_text_input(
         city_strategy=city_strategy,
         date_strategy=date_strategy,
         pipeline_strategy=pipeline_strategy,
+        intent_strategy=intent_strategy,
         audio_meta="",
     )
     return header, map_html
@@ -330,7 +357,9 @@ with gr.Blocks(title="Whisper • SRT style text") as app:
 
     gpu_stats_md = gr.Markdown(get_gpu_live_stats(device=DEFAULT_DEVICE))
     timer = gr.Timer(2.0)
-    timer.tick(fn=lambda: get_gpu_live_stats(device=DEFAULT_DEVICE), outputs=gpu_stats_md)
+    timer.tick(
+        fn=lambda: get_gpu_live_stats(device=DEFAULT_DEVICE), outputs=gpu_stats_md
+    )
 
     with gr.Row():
         model_dd = gr.Dropdown(MODEL_CHOICES, value="small", label="🧠 Modèle")
@@ -347,10 +376,15 @@ with gr.Blocks(title="Whisper • SRT style text") as app:
         date_strategy_dd = gr.Dropdown(
             DATE_STRATEGIES, value="eds", label="📅 Date strategy"
         )
+        intent_strategy_dd = gr.Dropdown(
+            INTENT_STRATEGIES, value="rule_based", label="🤖 Intent model"
+        )
 
     with gr.Row():
         audio_file = gr.Audio(type="filepath", label="🎵 Fichier audio")
-        text_input = gr.Textbox(label="📝 Texte", lines=3, placeholder="Écris ta demande ici...")
+        text_input = gr.Textbox(
+            label="📝 Texte", lines=3, placeholder="Écris ta demande ici..."
+        )
 
     with gr.Row():
         btn = gr.Button("🚀 Transcrire")
@@ -373,13 +407,20 @@ with gr.Blocks(title="Whisper • SRT style text") as app:
             city_strategy_dd,
             date_strategy_dd,
             pipeline_strategy_dd,
+            intent_strategy_dd,
         ],
         outputs=[output, map_view],
     )
 
     btn_text.click(
         analyze_text_input,
-        inputs=[text_input, city_strategy_dd, date_strategy_dd, pipeline_strategy_dd],
+        inputs=[
+            text_input,
+            city_strategy_dd,
+            date_strategy_dd,
+            pipeline_strategy_dd,
+            intent_strategy_dd,
+        ],
         outputs=[output, map_view],
     )
 
