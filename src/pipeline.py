@@ -19,7 +19,7 @@ from .graph.dijkstra import dijkstra
 from .graph.load_graph import Graph, load_graph
 from .nlp.extract_stations import StationExtractionResult, extract_stations
 from .nlp.hf_ner import extract_stations_hf
-from .nlp.intent import Intent, detect_intent
+from .nlp.intent import Intent, get_intent_classifier
 from .nlp.legacy_spacy import extract_stations_spacy
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -49,6 +49,7 @@ def solve_travel_order(
     nlp_name: str = "rule_based",
     path_name: str = "dijkstra",
     *,
+    intent_strategy: str = "rule_based",
     departure_station: Optional[str] = None,
     arrival_station: Optional[str] = None,
     generate_map: bool = True,
@@ -60,7 +61,8 @@ def solve_travel_order(
     (CLI, Gradio app with speech-to-text, tests, etc.).
     """
     # Step 1: Detect intent first
-    intent = detect_intent(sentence)
+    intent_classifier = get_intent_classifier(intent_strategy)
+    intent = intent_classifier(sentence)
 
     if intent == Intent.UNKNOWN:
         return "Error: Empty or invalid input"

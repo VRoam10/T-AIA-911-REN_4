@@ -10,6 +10,7 @@ torch: Optional[Any] = None
 _torch: Optional[Any] = None
 try:
     import torch as _torch_module
+
     _torch = _torch_module
 except Exception:
     pass
@@ -19,6 +20,7 @@ torch = _torch
 # NVML comes from "nvidia-ml-py" but import name is "pynvml"
 try:
     import pynvml as _pynvml  # type: ignore
+
     _NVML_OK = True
 except Exception:
     _pynvml = None
@@ -96,7 +98,9 @@ def get_gpu_live_stats(device: str = "cuda") -> str:
 
     _nvml_init_if_needed()
     if not _NVML_INITIALIZED:
-        return "🧵 GPU Live: NVML init failed (check NVIDIA driver / NVML availability)."
+        return (
+            "🧵 GPU Live: NVML init failed (check NVIDIA driver / NVML availability)."
+        )
 
     if pynvml is None:
         return "🧵 GPU Live: NVML module is not available."

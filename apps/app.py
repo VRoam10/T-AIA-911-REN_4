@@ -228,6 +228,7 @@ def _analyze_text(
             arrival_station=arr_station,
             generate_map=False,
             map_output_html=map_path,
+            intent_strategy=intent_strategy,
         )
     else:
         analysis = solve_travel_order(
@@ -236,6 +237,7 @@ def _analyze_text(
             departure_station=dep_station,
             arrival_station=arr_station,
             map_output_html=map_path,
+            intent_strategy=intent_strategy,
         )
         try:
             map_html = _map_iframe_from_html(map_path.read_text(encoding="utf-8"))

@@ -15,7 +15,9 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional, TypeVar, cast
+
 from .config import AppConfig, get_config
+
 T = TypeVar("T")
 
 

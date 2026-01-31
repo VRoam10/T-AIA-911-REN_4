@@ -2,80 +2,19 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 from transformers import pipeline
 
-from src.nlp.extract_stations import StationExtractionResult
+from src.nlp.extract_stations import (
+    StationExtractionResult,
+    extract_stations_from_locations,
+)
 
 DEFAULT_NER_MODEL: str = "Jean-Baptiste/camembert-ner"
 DEFAULT_NER_DATES_MODEL: str = "Jean-Baptiste/camembert-ner-with-dates"
 
 _PIPELINES: Dict[str, Any] = {}
-
-_STATION_MAP: Dict[str, str] | None = None
-
-
-def _load_station_map() -> Dict[str, str]:
-    """Load station names -> station_id mapping from data/stations.csv."""
-    global _STATION_MAP
-    if _STATION_MAP is not None:
-        return _STATION_MAP
-
-    project_root = Path(__file__).resolve().parents[3]
-    csv_path = project_root / "data" / "stations.csv"
-
-    stations: Dict[str, str] = {}
-    try:
-        with csv_path.open(encoding="utf-8") as f:
-            # local import to avoid csv at module import time
-            import csv
-
-            reader = csv.DictReader(f)
-            for row in reader:
-                code = (row.get("station_id") or "").strip()
-                name = (row.get("station_name") or "").strip()
-                if not code or not name:
-                    continue
-                stations[name.lower()] = code
-    except OSError:
-        stations = {}
-
-    _STATION_MAP = stations
-    return stations
-
-
-def _find_station_codes_from_locations(
-    sentence: str, locations: List[str]
-) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Map extracted location strings to station codes.
-    Uses order of appearance in the sentence when possible.
-    """
-    stations = _load_station_map()
-    if not stations:
-        return None, None
-
-    lowered = sentence.lower()
-    matches: List[Tuple[int, str]] = []
-
-    for loc in locations:
-        key = loc.lower().strip()
-        code = stations.get(key)
-        if not code:
-            continue
-        pos = lowered.find(key)
-        if pos != -1:
-            matches.append((pos, code))
-
-    if not matches:
-        return None, None
-
-    matches.sort(key=lambda item: item[0])
-    first = matches[0][1]
-    second = matches[1][1] if len(matches) > 1 else None
-    return first, second
 
 
 def _clean(s: str) -> str:
@@ -163,14 +102,11 @@ def extract_stations_hf(sentence: str) -> StationExtractionResult:
         )
 
     locations = extract_locations_hf(sentence)
-    departure, arrival = _find_station_codes_from_locations(sentence, locations)
-
-    error: Optional[str] = None
-    if departure is None or arrival is None:
-        error = "Could not detect both departure and arrival stations. from hf ner"
-
-    return StationExtractionResult(
-        departure=departure,
-        arrival=arrival,
-        error=error,
-    )
+    result = extract_stations_from_locations(sentence, locations)
+    if result.error:
+        return StationExtractionResult(
+            departure=result.departure,
+            arrival=result.arrival,
+            error=f"{result.error} (hf ner)",
+        )
+    return result

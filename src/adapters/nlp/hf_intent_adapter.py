@@ -85,7 +85,11 @@ class HuggingFaceIntentClassifier:
 
         try:
             classifier = self._get_classifier()
-            labels = ["demande de voyage", "autre demande", "texte non français"]
+            labels = [
+                "demande de voyage en français",
+                "texte en français sans demande de voyage",
+                "texte non français",
+            ]
 
             result = classifier(
                 sentence, labels, hypothesis_template="Ce texte est une {}."
@@ -107,8 +111,8 @@ class HuggingFaceIntentClassifier:
                 return Intent.UNKNOWN
 
             mapping = {
-                "demande de voyage": Intent.TRIP,
-                "autre demande": Intent.NOT_TRIP,
+                "demande de voyage en français": Intent.TRIP,
+                "texte en français sans demande de voyage": Intent.NOT_TRIP,
                 "texte non français": Intent.NOT_FRENCH,
             }
             return mapping.get(top_label, Intent.UNKNOWN)
