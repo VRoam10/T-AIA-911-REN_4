@@ -70,6 +70,22 @@ python -m src.pipeline
 
 This launches the demonstration pipeline with the example sentence included in `src/pipeline.py`.
 
+## Run the Gradio App
+
+Recommended (module mode, no PYTHONPATH tweaks needed):
+
+```bash
+python -m apps.app
+```
+
+Or use the interactive launcher:
+
+```bash
+python start.py
+```
+
+Then choose the Windows option when prompted.
+
 ## Example output
 
 For the sentence:

@@ -75,7 +75,9 @@ def plot_path(
         popup = f"{idx}. {label} ({station_id})"
         folium.Marker(location=(p.lat, p.lon), popup=popup).add_to(m)
 
-    folium.PolyLine(locations=coordinates, color="blue", weight=5, opacity=0.8).add_to(m)
+    folium.PolyLine(locations=coordinates, color="blue", weight=5, opacity=0.8).add_to(
+        m
+    )
 
     if len(coordinates) >= 2:
         m.fit_bounds(coordinates)

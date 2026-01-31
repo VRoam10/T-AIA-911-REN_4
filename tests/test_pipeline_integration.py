@@ -1,13 +1,13 @@
 """Tests d'intégration pour le pipeline complet avec détection d'intent."""
 
-import sys
 import os
+import sys
 
 # Add the src directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.pipeline import solve_travel_order
 from src.nlp.intent import Intent, detect_intent
+from src.pipeline import solve_travel_order
 
 
 def test_pipeline_with_valid_french_trip():
