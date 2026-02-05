@@ -598,3 +598,37 @@ def detect_intent(sentence: str) -> Intent:
 
     # If it's French but not a travel request
     return Intent.NOT_TRIP
+
+
+# ============================================================================
+# Intent Classifier Factory
+# ============================================================================
+
+from typing import Any, Callable, Dict, Union
+
+# Import the domain Intent for type hinting
+from ..domain.models import Intent as DomainIntent
+
+# Type alias for intent classifiers (both legacy and domain Intent are compatible at runtime)
+IntentClassifier = Callable[[str], Union[Intent, DomainIntent]]
+
+INTENT_STRATEGIES: Dict[str, IntentClassifier] = {
+    "rule_based": detect_intent,
+}
+
+
+def get_intent_classifier(strategy: str = "rule_based") -> IntentClassifier:
+    """Get intent classifier by strategy name.
+
+    Args:
+        strategy: Strategy name ('rule_based' or 'hf_xnli')
+
+    Returns:
+        A callable that takes a sentence and returns an Intent.
+    """
+    if strategy == "hf_xnli":
+        from ..adapters.nlp.hf_intent_adapter import HuggingFaceIntentClassifier
+
+        classifier = HuggingFaceIntentClassifier()
+        return classifier.classify
+    return INTENT_STRATEGIES.get(strategy, detect_intent)

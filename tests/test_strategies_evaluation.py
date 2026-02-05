@@ -14,6 +14,7 @@ from typing import Callable, Dict, List, Tuple
 from src.graph.dijkstra import dijkstra
 from src.graph.load_graph import Graph, load_graph
 from src.nlp.extract_stations import StationExtractionResult, extract_stations
+from src.nlp.hf_ner import extract_stations_hf
 
 CSV_PATH = Path(__file__).resolve().parent / "data" / "generated_sentences.csv"
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -29,6 +30,7 @@ PathFinder = Callable[[Graph, str, str], Tuple[list[str], float]]
 NLP_STRATEGIES: Dict[str, StationExtractor] = {
     "rule_based": extract_stations,
     "rule_test": extract_stations,  # For testing purposes to show how to add more
+    "hf_ner": extract_stations_hf,
 }
 
 PATH_FINDER_STRATEGIES: Dict[str, PathFinder] = {
