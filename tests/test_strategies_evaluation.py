@@ -29,13 +29,11 @@ PathFinder = Callable[[Graph, str, str], Tuple[list[str], float]]
 
 NLP_STRATEGIES: Dict[str, StationExtractor] = {
     "rule_based": extract_stations,
-    "rule_test": extract_stations,  # For testing purposes to show how to add more
     "hf_ner": extract_stations_hf,
 }
 
 PATH_FINDER_STRATEGIES: Dict[str, PathFinder] = {
     "dijkstra": dijkstra,
-    "dijkstra_test": dijkstra,  # For testing purposes to show how to add more
 }
 
 
