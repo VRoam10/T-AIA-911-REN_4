@@ -18,8 +18,9 @@ from typing import Callable, Dict, Optional, Tuple, Union
 from .graph.dijkstra import dijkstra
 from .graph.load_graph import Graph, load_graph
 from .nlp.extract_stations import StationExtractionResult, extract_stations
-from .nlp.intent import Intent, detect_intent
-
+from .nlp.hf_ner import extract_stations_hf
+from .nlp.intent import Intent, get_intent_classifier
+from .nlp.legacy_spacy import extract_stations_spacy
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
@@ -33,8 +34,8 @@ PathFinder = Callable[[Graph, str, str], Tuple[list[str], float]]
 
 NLP_STRATEGIES: Dict[str, StationExtractor] = {
     "rule_based": extract_stations,
-    #  "spacy": spacy,
-    #  "model_encoder"
+    "legacy_spacy": extract_stations_spacy,
+    "hf_ner": extract_stations_hf,
 }
 
 PATH_FINDER_STRATEGIES: Dict[str, PathFinder] = {
@@ -48,6 +49,9 @@ def solve_travel_order(
     nlp_name: str = "rule_based",
     path_name: str = "dijkstra",
     *,
+    intent_strategy: str = "rule_based",
+    departure_station: Optional[str] = None,
+    arrival_station: Optional[str] = None,
     generate_map: bool = True,
     map_output_html: Optional[Union[str, Path]] = None,
 ) -> str:
@@ -57,7 +61,8 @@ def solve_travel_order(
     (CLI, Gradio app with speech-to-text, tests, etc.).
     """
     # Step 1: Detect intent first
-    intent = detect_intent(sentence)
+    intent_classifier = get_intent_classifier(intent_strategy)
+    intent = intent_classifier(sentence)
 
     if intent == Intent.UNKNOWN:
         return "Error: Empty or invalid input"
@@ -67,24 +72,34 @@ def solve_travel_order(
         return "Error: Input is not a travel request"
 
     # Step 2: If intent is TRIP, proceed with NLP extraction
-    nlp = NLP_STRATEGIES.get(nlp_name)
-    if nlp is None:
-        return f"Unknown NLP strategy: {nlp_name!r}"
-
     path_finder = PATH_FINDER_STRATEGIES.get(path_name)
     if path_finder is None:
         return f"Unknown path-finding strategy: {path_name!r}"
 
-    result = nlp(sentence)
+    departure: Optional[str] = None
+    arrival: Optional[str] = None
 
-    if result.error:
-        return f"Extraction error: {result.error}"
+    if departure_station and arrival_station:
+        departure = departure_station
+        arrival = arrival_station
+    else:
+        nlp = NLP_STRATEGIES.get(nlp_name)
+        if nlp is None:
+            return f"Unknown NLP strategy: {nlp_name!r}"
 
-    if result.departure is None or result.arrival is None:
+        result = nlp(sentence)
+
+        if result.error:
+            return f"Extraction error: {result.error}"
+
+        if result.departure is None or result.arrival is None:
+            raise ValueError("Departure or arrival not set")
+
+        departure = result.departure
+        arrival = result.arrival
+
+    if departure is None or arrival is None:
         raise ValueError("Departure or arrival not set")
-
-    departure = result.departure
-    arrival = result.arrival
 
     graph = load_graph(str(STATIONS_CSV), str(EDGES_CSV))
     path, distance = path_finder(graph, departure, arrival)
