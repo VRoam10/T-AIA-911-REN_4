@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_51fd572f6bcbb6b6f3b9c8156cdc8ad2 {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    
+            <div class="folium-map" id="map_51fd572f6bcbb6b6f3b9c8156cdc8ad2" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_51fd572f6bcbb6b6f3b9c8156cdc8ad2 = L.map(
+                "map_51fd572f6bcbb6b6f3b9c8156cdc8ad2",
+                {
+                    center: [43.70493362527495, 7.262059427898337],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 6,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+            L.control.scale().addTo(map_51fd572f6bcbb6b6f3b9c8156cdc8ad2);
+
+            
+
+        
+    
+            var tile_layer_a49078fcf447c7481b0aa5b35a1fd87c = L.tileLayer(
+                "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 19,
+  "maxNativeZoom": 19,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_a49078fcf447c7481b0aa5b35a1fd87c.addTo(map_51fd572f6bcbb6b6f3b9c8156cdc8ad2);
+        
+    
+            var marker_4a3ccf4a0ed88ee186b1a45f9b6296cd = L.marker(
+                [43.70493362527495, 7.262059427898337],
+                {
+}
+            ).addTo(map_51fd572f6bcbb6b6f3b9c8156cdc8ad2);
+        
+    
+        var popup_feea2191cf346d9779cf7e00bf0408eb = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_a9a98be244616916a597dfa1aace353c = $(`<div id="html_a9a98be244616916a597dfa1aace353c" style="width: 100.0%; height: 100.0%;">1. Nice Ville (FR_NICE_VILLE)</div>`)[0];
+                popup_feea2191cf346d9779cf7e00bf0408eb.setContent(html_a9a98be244616916a597dfa1aace353c);
+            
+        
+
+        marker_4a3ccf4a0ed88ee186b1a45f9b6296cd.bindPopup(popup_feea2191cf346d9779cf7e00bf0408eb)
+        ;
+
+        
+    
+    
+            var marker_342ce6b2736e510f3218187e36225692 = L.marker(
+                [43.94194602172789, 7.514373727256736],
+                {
+}
+            ).addTo(map_51fd572f6bcbb6b6f3b9c8156cdc8ad2);
+        
+    
+        var popup_226e40fc6a598be74175954469709195 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_d7375ecc878987b5c5755a7dc9499754 = $(`<div id="html_d7375ecc878987b5c5755a7dc9499754" style="width: 100.0%; height: 100.0%;">2. Breil-Sur-Roya (FR_BREIL_SUR_ROYA)</div>`)[0];
+                popup_226e40fc6a598be74175954469709195.setContent(html_d7375ecc878987b5c5755a7dc9499754);
+            
+        
+
+        marker_342ce6b2736e510f3218187e36225692.bindPopup(popup_226e40fc6a598be74175954469709195)
+        ;
+
+        
+    
+    
+            var marker_24048e5ed327efdee9f3662619dcbcae = L.marker(
+                [44.56674756944446, 6.496152520286437],
+                {
+}
+            ).addTo(map_51fd572f6bcbb6b6f3b9c8156cdc8ad2);
+        
+    
+        var popup_896ecd9addc77cc917d78781b6502336 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_da6b8ae4c6da4ca4842e4229b296e053 = $(`<div id="html_da6b8ae4c6da4ca4842e4229b296e053" style="width: 100.0%; height: 100.0%;">3. Embrun (FR_EMBRUN)</div>`)[0];
+                popup_896ecd9addc77cc917d78781b6502336.setContent(html_da6b8ae4c6da4ca4842e4229b296e053);
+            
+        
+
+        marker_24048e5ed327efdee9f3662619dcbcae.bindPopup(popup_896ecd9addc77cc917d78781b6502336)
+        ;
+
+        
+    
+    
+            var marker_d883f40cd69a00c74c30101fc62b2c5d = L.marker(
+                [45.19128387819784, 5.714309253432913],
+                {
+}
+            ).addTo(map_51fd572f6bcbb6b6f3b9c8156cdc8ad2);
+        
+    
+        var popup_d41a266e866a8435f0f5449adbfa2fa6 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_80d7a7721a04b689bbf26d562b5eba29 = $(`<div id="html_80d7a7721a04b689bbf26d562b5eba29" style="width: 100.0%; height: 100.0%;">4. Grenoble (FR_GRENOBLE)</div>`)[0];
+                popup_d41a266e866a8435f0f5449adbfa2fa6.setContent(html_80d7a7721a04b689bbf26d562b5eba29);
+            
+        
+
+        marker_d883f40cd69a00c74c30101fc62b2c5d.bindPopup(popup_d41a266e866a8435f0f5449adbfa2fa6)
+        ;
+
+        
+    
+    
+            var marker_60f34a68afc3b616a6b3f7a854b1a35b = L.marker(
+                [45.35145499060232, 5.266393152481507],
+                {
+}
+            ).addTo(map_51fd572f6bcbb6b6f3b9c8156cdc8ad2);
+        
+    
+        var popup_5e48ff3b31d9c016db393230915cf87c = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_5daa069dc85ddfe72d73d972e3ca6c95 = $(`<div id="html_5daa069dc85ddfe72d73d972e3ca6c95" style="width: 100.0%; height: 100.0%;">5. La côte-Saint-André-Le-Rival (FR_LA_COTE_ST_ANDRE_LE_RIVAL)</div>`)[0];
+                popup_5e48ff3b31d9c016db393230915cf87c.setContent(html_5daa069dc85ddfe72d73d972e3ca6c95);
+            
+        
+
+        marker_60f34a68afc3b616a6b3f7a854b1a35b.bindPopup(popup_5e48ff3b31d9c016db393230915cf87c)
+        ;
+
+        
+    
+    
+            var marker_dbf32f440483b71792e6afb7967ed8eb = L.marker(
+                [45.61066958030951, 4.807182865174196],
+                {
+}
+            ).addTo(map_51fd572f6bcbb6b6f3b9c8156cdc8ad2);
+        
+    
+        var popup_8a0cd4d4cf11d377785cbf981b27f473 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_598a1e6b023ffefb6ea2cf447e001958 = $(`<div id="html_598a1e6b023ffefb6ea2cf447e001958" style="width: 100.0%; height: 100.0%;">6. Ternay (FR_TERNAY)</div>`)[0];
+                popup_8a0cd4d4cf11d377785cbf981b27f473.setContent(html_598a1e6b023ffefb6ea2cf447e001958);
+            
+        
+
+        marker_dbf32f440483b71792e6afb7967ed8eb.bindPopup(popup_8a0cd4d4cf11d377785cbf981b27f473)
+        ;
+
+        
+    
+    
+            var marker_85e6b506fa594bbb7c4d7e2ce94d0a36 = L.marker(
+                [45.76054053999095, 4.860200803130667],
+                {
+}
+            ).addTo(map_51fd572f6bcbb6b6f3b9c8156cdc8ad2);
+        
+    
+        var popup_06b323101da9f82432a3e970ee3bbabd = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_fb3cb8196c441ffe243c533bffd3ea32 = $(`<div id="html_fb3cb8196c441ffe243c533bffd3ea32" style="width: 100.0%; height: 100.0%;">7. Lyon Part-Dieu (FR_LYON_PART_DIEU)</div>`)[0];
+                popup_06b323101da9f82432a3e970ee3bbabd.setContent(html_fb3cb8196c441ffe243c533bffd3ea32);
+            
+        
+
+        marker_85e6b506fa594bbb7c4d7e2ce94d0a36.bindPopup(popup_06b323101da9f82432a3e970ee3bbabd)
+        ;
+
+        
+    
+    
+            var poly_line_7d0f7da2967fecaf59fb725172ec3d92 = L.polyline(
+                [[43.70493362527495, 7.262059427898337], [43.94194602172789, 7.514373727256736], [44.56674756944446, 6.496152520286437], [45.19128387819784, 5.714309253432913], [45.35145499060232, 5.266393152481507], [45.61066958030951, 4.807182865174196], [45.76054053999095, 4.860200803130667]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_51fd572f6bcbb6b6f3b9c8156cdc8ad2);
+        
+    
+            map_51fd572f6bcbb6b6f3b9c8156cdc8ad2.fitBounds(
+                [[43.70493362527495, 7.262059427898337], [43.94194602172789, 7.514373727256736], [44.56674756944446, 6.496152520286437], [45.19128387819784, 5.714309253432913], [45.35145499060232, 5.266393152481507], [45.61066958030951, 4.807182865174196], [45.76054053999095, 4.860200803130667]],
+                {}
+            );
+        
+</script>
+</html>

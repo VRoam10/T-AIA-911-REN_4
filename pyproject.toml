@@ -3,8 +3,6 @@ line-length = 88
 target-version = ['py311']
 include = '\.pyi?$'
 
-
-
 [tool.isort]
 profile = "black"
 line_length = 88
@@ -34,5 +32,3 @@ version_files = [
 [build-system]
 requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
-
-

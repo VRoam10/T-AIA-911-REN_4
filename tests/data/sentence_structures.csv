@@ -1,0 +1,55 @@
+structure_id,template,expects_results
+1,"Je voudrais aller de {DEP} à {ARR}",CORRECT
+2,"Billet {DEP} {ARR}",CORRECT
+3,"Un train partant de {DEP} pour {ARR}",CORRECT
+4,"Comment aller à {ARR} depuis {DEP} ?",CORRECT
+5,"Je veux aller à {ARR}",NOT_TRIP
+6,"Quel est le prix d’un billet ?",NOT_TRIP
+7,"Je voyage demain",NOT_TRIP
+8,"Départ {DEP}",NOT_TRIP
+9,"{DEP} vers {ARR} en train",CORRECT
+10,"train {DEP} vers {ARR}",CORRECT
+11,"Je cherche un train pour {ARR}",NOT_TRIP
+12,"Horaires de train de {DEP} à {ARR}",CORRECT
+13,"Prochain train de {DEP} à {ARR}",CORRECT
+14,"Je vais voir un ami à {ARR}",NOT_TRIP
+15,"I need to go {ARR} from {DEP}",NOT_FRENCH
+16,"De {DEP} à {ARR}",CORRECT
+17,"Comment aller de {DEP} à {ARR} ?",CORRECT
+18,"Je veux aller de {DEP} à {ARR}",CORRECT
+19,"Itinéraire entre {DEP} et {ARR}",CORRECT
+20,"Trajet {DEP} - {ARR}",CORRECT
+21,"Partir de {DEP} pour aller à {ARR}",CORRECT
+22,"Depuis {DEP} jusqu'à {ARR}",CORRECT
+23,"Voyage de {DEP} vers {ARR}",CORRECT
+24,"Aller simple {DEP} → {ARR}",CORRECT
+25,"Trajet en train entre {DEP} et {ARR}",CORRECT
+26,"Je dois me rendre à {ARR} depuis {DEP}",CORRECT
+27,"Direction {ARR} au départ de {DEP}",CORRECT
+28,"From {DEP} to {ARR}",NOT_FRENCH
+29,"Train from {DEP} to {ARR}",NOT_FRENCH
+30,"Going to {ARR} from {DEP} by train",NOT_FRENCH
+31,"¿Cómo ir de {DEP} a {ARR}?",NOT_FRENCH
+32,"Viajar de {DEP} a {ARR}",NOT_FRENCH
+33,"Ir de {DEP} hacia {ARR}",NOT_FRENCH
+34,"Ich möchte von {DEP} nach {ARR} fahren",NOT_FRENCH
+35,"Zug von {DEP} nach {ARR}",NOT_FRENCH
+36,"Da {DEP} a {ARR}",NOT_FRENCH
+37,"Поезд из {DEP} в {ARR}",NOT_FRENCH
+38,"من {DEP} إلى {ARR}",NOT_FRENCH
+39,"DEP={DEP} ARR={ARR}",CORRECT
+40,"{DEP} -> {ARR}",CORRECT
+41,"{DEP}/{ARR}",CORRECT
+42,"trajet:{DEP}-{ARR}",CORRECT
+43,"aller {DEP} {ARR}",CORRECT
+44,"Je pense aller de {DEP} à {ARR}",CORRECT
+45,"Peut-on aller de {DEP} à {ARR} ?",CORRECT
+46,"Besoin d’un train {DEP} {ARR}",CORRECT
+47,"Je cherche un itinéraire {DEP}-{ARR}",CORRECT
+48,"Train demain de {DEP} à {ARR}",CORRECT
+49,"Déplacement pro de {DEP} vers {ARR}",CORRECT
+50,"Voyage prévu entre {DEP} et {ARR}",CORRECT
+51,"Je pars bientôt",NOT_TRIP
+52,"Voyage à {ARR}",NOT_TRIP
+53,"Billet de train",NOT_TRIP
+54,"Horaires de train",NOT_TRIP

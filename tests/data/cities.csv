@@ -1,0 +1,109 @@
+city_id,canonical,variant
+1,Paris,Paris
+1,Paris,Gare de Lyon
+1,Paris,Paris Gare de Lyon
+1,Paris,Gare du Nord
+1,Paris,Paris Gare du Nord
+1,Paris,Gare Montparnasse
+1,Paris,Paris Montparnasse
+1,Paris,Gare de l'Est
+1,Paris,Paris Gare de l'Est
+2,Lyon,Lyon
+2,Lyon,Lyon Part Dieu
+2,Lyon,Gare Part-Dieu
+2,Lyon,Lyon Perrache
+2,Lyon,Gare de Perrache
+3,Marseille,Marseille
+3,Marseille,Marseille Saint-Charles
+3,Marseille,Gare Saint-Charles
+4,Toulouse,Toulouse
+4,Toulouse,Toulouse Matabiau
+4,Toulouse,Gare Matabiau
+5,Nice,Nice
+5,Nice,Nice Ville
+5,Nice,Gare de Nice-Ville
+6,Nantes,Nantes
+6,Nantes,Gare de Nantes
+7,Strasbourg,Strasbourg
+7,Strasbourg,Gare de Strasbourg
+8,Montpellier,Montpellier
+8,Montpellier,Montpellier Sud de France
+8,Montpellier,Montpellier Saint-Roch
+9,Bordeaux,Bordeaux
+9,Bordeaux,Bordeaux Saint-Jean
+9,Bordeaux,Gare Saint-Jean
+10,Lille,Lille
+10,Lille,Lille Flandres
+10,Lille,Gare de Lille Flandres
+10,Lille,Lille Europe
+11,Rennes,Rennes
+11,Rennes,Gare de Rennes
+12,Reims,Reims
+12,Reims,Gare de Reims
+12,Reims,Reims Centre
+13,Le Havre,Le Havre
+13,Le Havre,Gare du Havre
+14,Saint-Étienne,Saint-Étienne
+14,Saint-Étienne,St Étienne Châteaucreux
+14,Saint-Étienne,Gare de Châteaucreux
+15,Toulon,Toulon
+15,Toulon,Gare de Toulon
+16,Grenoble,Grenoble
+16,Grenoble,Gare de Grenoble
+17,Dijon,Dijon
+17,Dijon,Dijon Ville
+17,Dijon,Gare de Dijon-Ville
+18,Angers,Angers
+18,Angers,Angers Saint-Laud
+18,Angers,Gare Saint-Laud
+19,Nîmes,Nîmes
+19,Nîmes,Gare de Nîmes
+20,Clermont-Ferrand,Clermont-Ferrand
+20,Clermont-Ferrand,Gare de Clermont-Ferrand
+21,Aix-en-Provence,Aix-en-Provence
+21,Aix-en-Provence,Aix-en-Provence TGV
+22,Brest,Brest
+22,Brest,Gare de Brest
+23,Tours,Tours
+23,Tours,Gare de Tours
+24,Amiens,Amiens
+24,Amiens,Gare d'Amiens
+25,Limoges,Limoges
+25,Limoges,Limoges Bénédictins
+25,Limoges,Gare des Bénédictins
+26,Annecy,Annecy
+26,Annecy,Gare d'Annecy
+27,Perpignan,Perpignan
+27,Perpignan,Gare de Perpignan
+28,Besancon,Besançon
+28,Besancon,Besançon Viotte
+28,Besancon,Gare Viotte
+29,Metz,Metz
+29,Metz,Gare de Metz
+30,Orléans,Orléans
+30,Orléans,Gare d'Orléans
+31,Rouen,Rouen
+31,Rouen,Rouen Rive Droite
+31,Rouen,Gare de Rouen
+32,Avignon,Avignon
+32,Avignon,Avignon Centre
+32,Avignon,Avignon TGV
+33,Bayonne,Bayonne
+33,Bayonne,Gare de Bayonne
+34,Poitiers,Poitiers
+34,Poitiers,Gare de Poitiers
+35,Valence,Valence
+35,Valence,Valence Ville
+35,Valence,Valence TGV
+36,Chambéry,Chambéry
+36,Chambéry,Gare de Chambéry-Challes-les-Eaux
+37,La Rochelle,La Rochelle
+37,La Rochelle,Gare de La Rochelle
+38,Antibes,Antibes
+38,Antibes,Gare d'Antibes
+39,Colmar,Colmar
+39,Colmar,Gare de Colmar
+40,Calais,Calais
+40,Calais,Calais Ville
+41,Boulogne-sur-Mer,Boulogne-sur-Mer
+41,Boulogne-sur-Mer,Gare de Boulogne-Ville
