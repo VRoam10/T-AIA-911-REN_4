@@ -6,8 +6,10 @@ a comprehensive results report in PDF format for deliveries.
 
 import csv
 import json
+import statistics
 import time
-from dataclasses import asdict, dataclass
+from collections import defaultdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Tuple
 
@@ -70,6 +72,23 @@ class StrategyMetrics:
     avg_execution_time: float
     min_execution_time: float
     max_execution_time: float
+    # Enhanced timing
+    median_execution_time: float = 0.0
+    p95_execution_time: float = 0.0
+    std_execution_time: float = 0.0
+    # Component timing
+    nlp_avg_time: float = 0.0
+    nlp_median_time: float = 0.0
+    nlp_p95_time: float = 0.0
+    path_avg_time: float = 0.0
+    path_median_time: float = 0.0
+    path_p95_time: float = 0.0
+    # Binary classification (CORRECT as positive)
+    precision: float = 0.0
+    recall: float = 0.0
+    f1: float = 0.0
+    # Per-category accuracy
+    per_category_accuracy: Dict[str, float] = field(default_factory=dict)
 
 
 def load_sentences() -> List[Tuple[str, str, str]]:
@@ -182,11 +201,24 @@ def run_pipeline(
     return message, nlp_time, path_time, departure, arrival, path, distance, None
 
 
+def _safe_div(n: float, d: float) -> float:
+    """Safe division returning 0 when denominator is 0."""
+    return n / d if d > 0 else 0.0
+
+
+def _compute_p95(values: List[float]) -> float:
+    """Compute the 95th percentile of a list of values."""
+    if not values:
+        return 0.0
+    s = sorted(values)
+    return s[min(int(len(s) * 0.95), len(s) - 1)]
+
+
 def evaluate_strategies() -> Tuple[List[TestResult], List[StrategyMetrics]]:
     """Evaluate all strategy combinations against all test sentences."""
     test_results: List[TestResult] = []
-    metrics_dict: Dict[Tuple[str, str], List[float]] = {}
-    metrics_dict_passed: Dict[Tuple[str, str], int] = {}
+    # Track detailed data per strategy combination
+    strategy_data: Dict[Tuple[str, str], Dict] = {}
 
     sentences = load_sentences()
 
@@ -194,8 +226,15 @@ def evaluate_strategies() -> Tuple[List[TestResult], List[StrategyMetrics]]:
     for nlp_name in NLP_STRATEGIES.keys():
         for path_name in PATH_FINDER_STRATEGIES.keys():
             key = (nlp_name, path_name)
-            metrics_dict[key] = []
-            metrics_dict_passed[key] = 0
+            strategy_data[key] = {
+                "total_times": [],
+                "nlp_times": [],
+                "path_times": [],
+                "passed": 0,
+                "passed_by_cat": defaultdict(int),
+                "total_by_cat": defaultdict(int),
+                "results": [],
+            }
 
             for sentence_id, sentence, expected_output in sentences:
                 (
@@ -230,15 +269,44 @@ def evaluate_strategies() -> Tuple[List[TestResult], List[StrategyMetrics]]:
                 )
                 test_results.append(test_result)
 
-                metrics_dict[key].append(total_time)
+                d = strategy_data[key]
+                d["total_times"].append(total_time)
+                d["nlp_times"].append(nlp_time)
+                d["path_times"].append(path_time)
+                d["total_by_cat"][expected_output] += 1
+                d["results"].append(test_result)
                 if passed:
-                    metrics_dict_passed[key] += 1
+                    d["passed"] += 1
+                    d["passed_by_cat"][expected_output] += 1
 
     # Compute aggregated metrics
     strategy_metrics: List[StrategyMetrics] = []
-    for (nlp_name, path_name), times in metrics_dict.items():
-        _passed = metrics_dict_passed[(nlp_name, path_name)]
+    for (nlp_name, path_name), d in strategy_data.items():
         total = len(sentences)
+        _passed = d["passed"]
+        times = d["total_times"]
+        nlp_times = d["nlp_times"]
+        path_times = d["path_times"]
+
+        # Per-category accuracy
+        per_cat: Dict[str, float] = {}
+        for cat in sorted(d["total_by_cat"].keys()):
+            per_cat[cat] = _safe_div(d["passed_by_cat"][cat], d["total_by_cat"][cat])
+
+        # Binary P/R/F1: CORRECT as positive class
+        # TP = expected CORRECT and passed (pipeline succeeded)
+        # FP = expected NOT_CORRECT and NOT passed (pipeline succeeded when it shouldn't)
+        # FN = expected CORRECT and NOT passed (pipeline failed when it should succeed)
+        tp = sum(1 for r in d["results"] if r.expected_output == "CORRECT" and r.passed)
+        fp = sum(
+            1 for r in d["results"] if r.expected_output != "CORRECT" and not r.passed
+        )
+        fn = sum(
+            1 for r in d["results"] if r.expected_output == "CORRECT" and not r.passed
+        )
+        prec = _safe_div(tp, tp + fp)
+        rec = _safe_div(tp, tp + fn)
+        f1 = _safe_div(2 * prec * rec, prec + rec)
 
         metrics = StrategyMetrics(
             nlp_strategy=nlp_name,
@@ -246,10 +314,23 @@ def evaluate_strategies() -> Tuple[List[TestResult], List[StrategyMetrics]]:
             total_tests=total,
             passed_tests=_passed,
             failed_tests=total - _passed,
-            accuracy=_passed / total if total > 0 else 0,
-            avg_execution_time=sum(times) / len(times) if times else 0,
+            accuracy=_safe_div(_passed, total),
+            avg_execution_time=statistics.mean(times) if times else 0,
             min_execution_time=min(times) if times else 0,
             max_execution_time=max(times) if times else 0,
+            median_execution_time=statistics.median(times) if times else 0,
+            p95_execution_time=_compute_p95(times),
+            std_execution_time=(statistics.stdev(times) if len(times) > 1 else 0),
+            nlp_avg_time=statistics.mean(nlp_times) if nlp_times else 0,
+            nlp_median_time=(statistics.median(nlp_times) if nlp_times else 0),
+            nlp_p95_time=_compute_p95(nlp_times),
+            path_avg_time=statistics.mean(path_times) if path_times else 0,
+            path_median_time=(statistics.median(path_times) if path_times else 0),
+            path_p95_time=_compute_p95(path_times),
+            precision=prec,
+            recall=rec,
+            f1=f1,
+            per_category_accuracy=per_cat,
         )
         strategy_metrics.append(metrics)
 
@@ -342,31 +423,88 @@ def generate_pdf_report(
         strategy_name = f"{metric.nlp_strategy.upper()} NLP + {metric.path_strategy.upper()} Path Finder"
         story.append(Paragraph(strategy_name, styles["Heading3"]))
 
+        sub_style = ParagraphStyle(
+            "SubHeading3",
+            parent=styles["Heading3"],
+            fontSize=11,
+            textColor=colors.HexColor("#555555"),
+        )
+
         perf_data = [
             [
                 "Accuracy",
                 f"{metric.accuracy * 100:.2f}% ({metric.passed_tests}/{metric.total_tests})",
             ],
-            ["Avg Execution Time", f"{metric.avg_execution_time * 1000:.2f} ms"],
-            ["Min Execution Time", f"{metric.min_execution_time * 1000:.2f} ms"],
-            ["Max Execution Time", f"{metric.max_execution_time * 1000:.2f} ms"],
+            ["Precision (CORRECT)", f"{metric.precision * 100:.2f}%"],
+            ["Recall (CORRECT)", f"{metric.recall * 100:.2f}%"],
+            ["F1 Score (CORRECT)", f"{metric.f1 * 100:.2f}%"],
         ]
 
-        story.append(
-            Paragraph(
-                "Pipeline Results",
-                ParagraphStyle(
-                    "SubHeading3",
-                    parent=styles["Heading3"],
-                    fontSize=11,
-                    textColor=colors.HexColor("#555555"),
-                ),
-            )
-        )
+        story.append(Paragraph("Classification Metrics", sub_style))
 
         perf_table = Table(perf_data, colWidths=[2.5 * inch, 2.5 * inch])
         perf_table.setStyle(table_style)
         story.append(perf_table)
+        story.append(Spacer(1, 0.15 * inch))
+
+        # Per-category accuracy
+        if metric.per_category_accuracy:
+            story.append(Paragraph("Per-Category Accuracy", sub_style))
+            cat_header_style = TableStyle(
+                [
+                    (
+                        "BACKGROUND",
+                        (0, 0),
+                        (-1, 0),
+                        colors.HexColor("#1f6feb"),
+                    ),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 10),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+                    ("GRID", (0, 0), (-1, -1), 1, colors.grey),
+                ]
+            )
+            cat_data = [["Category", "Accuracy"]]
+            for cat, acc in sorted(metric.per_category_accuracy.items()):
+                cat_data.append([cat, f"{acc * 100:.2f}%"])
+            cat_table = Table(cat_data, colWidths=[2.5 * inch, 2.5 * inch])
+            cat_table.setStyle(cat_header_style)
+            story.append(cat_table)
+            story.append(Spacer(1, 0.15 * inch))
+
+        # Timing
+        story.append(Paragraph("Pipeline Timing", sub_style))
+        timing_data = [
+            [
+                "Avg Execution Time",
+                f"{metric.avg_execution_time * 1000:.2f} ms",
+            ],
+            [
+                "Median Execution Time",
+                f"{metric.median_execution_time * 1000:.2f} ms",
+            ],
+            [
+                "P95 Execution Time",
+                f"{metric.p95_execution_time * 1000:.2f} ms",
+            ],
+            [
+                "Min Execution Time",
+                f"{metric.min_execution_time * 1000:.2f} ms",
+            ],
+            [
+                "Max Execution Time",
+                f"{metric.max_execution_time * 1000:.2f} ms",
+            ],
+            [
+                "Std Dev",
+                f"{metric.std_execution_time * 1000:.2f} ms",
+            ],
+        ]
+        timing_table = Table(timing_data, colWidths=[2.5 * inch, 2.5 * inch])
+        timing_table.setStyle(table_style)
+        story.append(timing_table)
         story.append(Spacer(1, 0.2 * inch))
 
         # Filter results for this strategy combination
@@ -399,11 +537,15 @@ def generate_pdf_report(
             ["Extraction Errors", str(len(nlp_strategy_errors))],
             [
                 "Avg Extraction Time",
-                (
-                    f"{sum(r.nlp_execution_time for r in strategy_results) / len(strategy_results) * 1000:.2f} ms"
-                    if strategy_results
-                    else "N/A"
-                ),
+                f"{metric.nlp_avg_time * 1000:.2f} ms",
+            ],
+            [
+                "Median Extraction Time",
+                f"{metric.nlp_median_time * 1000:.2f} ms",
+            ],
+            [
+                "P95 Extraction Time",
+                f"{metric.nlp_p95_time * 1000:.2f} ms",
             ],
         ]
         nlp_strategy_table = Table(
@@ -429,15 +571,26 @@ def generate_pdf_report(
         path_strategy_results = [r for r in strategy_results if not r.error]
 
         if path_strategy_results:
+            avg_path_len = sum(
+                len(r.path) if r.path else 0 for r in path_strategy_results
+            ) / len(path_strategy_results)
             path_strategy_data = [
                 ["Paths Computed", str(len(path_strategy_results))],
                 [
                     "Avg Computation Time",
-                    f"{sum(r.path_execution_time for r in path_strategy_results) / len(path_strategy_results) * 1000:.2f} ms",
+                    f"{metric.path_avg_time * 1000:.2f} ms",
+                ],
+                [
+                    "Median Computation Time",
+                    f"{metric.path_median_time * 1000:.2f} ms",
+                ],
+                [
+                    "P95 Computation Time",
+                    f"{metric.path_p95_time * 1000:.2f} ms",
                 ],
                 [
                     "Avg Path Length",
-                    f"{sum(len(p) if p else 0 for p in [r.path for r in path_strategy_results]) / len(path_strategy_results):.2f} stations",
+                    f"{avg_path_len:.2f} stations",
                 ],
             ]
             path_strategy_table = Table(
@@ -468,13 +621,24 @@ def generate_pdf_report(
     nlp_errors_global = [r for r in results if r.error]
 
     if results:
+        nlp_times_global = [r.nlp_execution_time for r in results]
+        nlp_times_sorted = sorted(nlp_times_global)
+        nlp_p95_idx = min(int(len(nlp_times_sorted) * 0.95), len(nlp_times_sorted) - 1)
         nlp_data_global = [
             ["Total Inputs Processed", str(len(results))],
             ["Successfully Extracted", str(len(nlp_results_global))],
             ["Extraction Errors", str(len(nlp_errors_global))],
             [
                 "Avg Extraction Time",
-                f"{sum(r.nlp_execution_time for r in results) / len(results) * 1000:.2f} ms",
+                f"{statistics.mean(nlp_times_global) * 1000:.2f} ms",
+            ],
+            [
+                "Median Extraction Time",
+                f"{statistics.median(nlp_times_global) * 1000:.2f} ms",
+            ],
+            [
+                "P95 Extraction Time",
+                f"{nlp_times_sorted[nlp_p95_idx] * 1000:.2f} ms",
             ],
         ]
         nlp_table_global = Table(nlp_data_global, colWidths=[3 * inch, 2 * inch])
@@ -523,19 +687,36 @@ def generate_pdf_report(
     story.append(Spacer(1, 0.1 * inch))
 
     all_results = results
-    total_time = sum(r.total_execution_time for r in all_results)
-    avg_time = total_time / len(all_results) if all_results else 0
+    all_times = [r.total_execution_time for r in all_results]
+    all_times_sorted = sorted(all_times)
+    all_p95_idx = min(int(len(all_times_sorted) * 0.95), len(all_times_sorted) - 1)
 
     pipeline_data = [
         ["Total Pipeline Executions", str(len(all_results))],
-        ["Avg Total Time", f"{avg_time * 1000:.2f} ms"],
+        ["Avg Total Time", f"{statistics.mean(all_times) * 1000:.2f} ms"],
+        [
+            "Median Total Time",
+            f"{statistics.median(all_times) * 1000:.2f} ms",
+        ],
+        [
+            "P95 Total Time",
+            f"{all_times_sorted[all_p95_idx] * 1000:.2f} ms",
+        ],
         [
             "Min Total Time",
-            f"{min(r.total_execution_time for r in all_results) * 1000:.2f} ms",
+            f"{min(all_times) * 1000:.2f} ms",
         ],
         [
             "Max Total Time",
-            f"{max(r.total_execution_time for r in all_results) * 1000:.2f} ms",
+            f"{max(all_times) * 1000:.2f} ms",
+        ],
+        [
+            "Std Dev",
+            (
+                f"{statistics.stdev(all_times) * 1000:.2f} ms"
+                if len(all_times) > 1
+                else "N/A"
+            ),
         ],
     ]
     pipeline_table = Table(pipeline_data, colWidths=[3 * inch, 2 * inch])
