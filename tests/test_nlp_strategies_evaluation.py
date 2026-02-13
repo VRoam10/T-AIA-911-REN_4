@@ -28,6 +28,27 @@ try:
 except Exception:
     _SPACY_AVAILABLE = False
 
+try:
+    from pathlib import Path as _Path
+
+    _finetuned_ner_model = str(
+        _Path(__file__).resolve().parent.parent
+        / "training"
+        / "models"
+        / "ner-camembert"
+    )
+    _finetuned_intent_model = str(
+        _Path(__file__).resolve().parent.parent
+        / "training"
+        / "models"
+        / "intent-camembert"
+    )
+    _FINETUNED_NER_AVAILABLE = _Path(_finetuned_ner_model).exists()
+    _FINETUNED_INTENT_AVAILABLE = _Path(_finetuned_intent_model).exists()
+except Exception:
+    _FINETUNED_NER_AVAILABLE = False
+    _FINETUNED_INTENT_AVAILABLE = False
+
 CSV_PATH = Path(__file__).resolve().parent / "data" / "generated_sentences.csv"
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "test_results"
 
@@ -44,9 +65,39 @@ EXTRACTION_STRATEGIES: Dict[str, StationExtractorFn] = {
 if _SPACY_AVAILABLE:
     EXTRACTION_STRATEGIES["spacy"] = extract_stations_spacy
 
+if _FINETUNED_NER_AVAILABLE:
+    from src.adapters.nlp.finetuned_ner_adapter import FineTunedNERAdapter
+
+    _finetuned_ner = FineTunedNERAdapter(model_path=_finetuned_ner_model)
+
+    def _extract_stations_finetuned(sentence: str) -> StationExtractionResult:
+        result = _finetuned_ner.extract(sentence)
+        # Convert domain model to legacy model for test compatibility
+        from src.nlp.extract_stations import StationExtractionResult as LegacyResult
+
+        return LegacyResult(
+            departure=result.departure,
+            arrival=result.arrival,
+            error=result.error,
+        )
+
+    EXTRACTION_STRATEGIES["finetuned_ner"] = _extract_stations_finetuned
+
 INTENT_STRATEGIES: Dict[str, IntentClassifierFn] = {
     "rule_based": detect_intent,
 }
+
+if _FINETUNED_INTENT_AVAILABLE:
+    from src.adapters.nlp.finetuned_intent_adapter import FineTunedIntentClassifier
+
+    _finetuned_intent = FineTunedIntentClassifier(model_path=_finetuned_intent_model)
+
+    def _classify_intent_finetuned(sentence: str) -> Intent:
+        domain_intent = _finetuned_intent.classify(sentence)
+        # Convert domain Intent to legacy Intent by name
+        return Intent[domain_intent.name]
+
+    INTENT_STRATEGIES["finetuned_intent"] = _classify_intent_finetuned
 
 _EXPECTED_TO_INTENT: Dict[str, str] = {
     "CORRECT": "TRIP",

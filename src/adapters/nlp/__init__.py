@@ -6,6 +6,8 @@ Available implementations:
 - HuggingFaceNERAdapter: HuggingFace transformers NER
 - RuleBasedIntentClassifier: Rule-based intent classification
 - HuggingFaceIntentClassifier: HuggingFace zero-shot intent classification
+- FineTunedIntentClassifier: Fine-tuned CamemBERT intent classification
+- FineTunedNERAdapter: Fine-tuned CamemBERT NER extraction
 """
 
 from .intent_adapter import RuleBasedIntentClassifier
@@ -31,5 +33,20 @@ try:
     from .hf_intent_adapter import HuggingFaceIntentClassifier
 
     __all__.append("HuggingFaceIntentClassifier")
+except ImportError:
+    pass
+
+# Fine-tuned adapters are optional (requires transformers)
+try:
+    from .finetuned_intent_adapter import FineTunedIntentClassifier
+
+    __all__.append("FineTunedIntentClassifier")
+except ImportError:
+    pass
+
+try:
+    from .finetuned_ner_adapter import FineTunedNERAdapter
+
+    __all__.append("FineTunedNERAdapter")
 except ImportError:
     pass
