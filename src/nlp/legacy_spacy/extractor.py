@@ -9,9 +9,16 @@ from src.nlp.extract_stations import (
     extract_stations_from_locations,
 )
 
-# Loads once at import time (heavy, but fast after)
-nlp = spacy.load("fr_core_news_md")
-nlp.add_pipe("eds.dates")
+_nlp = None
+
+
+def _get_nlp():
+    """Lazy-load the SpaCy model with eds.dates pipeline."""
+    global _nlp
+    if _nlp is None:
+        _nlp = spacy.load("fr_core_news_md")
+        _nlp.add_pipe("eds.dates")
+    return _nlp
 
 
 def extract_locations_spacy(text: str) -> List[str]:
@@ -21,7 +28,7 @@ def extract_locations_spacy(text: str) -> List[str]:
     Pros: fast (local), no extra deps
     Cons: less robust on ASR transcripts (punctuation/casing noise)
     """
-    doc = nlp(text)
+    doc = _get_nlp()(text)
     return sorted({ent.text for ent in doc.ents if ent.label_ in ("LOC", "GPE")})
 
 
@@ -32,7 +39,7 @@ def extract_dates_eds(text: str) -> List[str]:
     Pros: fast, no HF dependency
     Cons: may miss natural/colloquial forms, can be noisy
     """
-    doc = nlp(text)
+    doc = _get_nlp()(text)
     spans = doc.spans.get("dates", [])
     return [sp.text for sp in spans]
 

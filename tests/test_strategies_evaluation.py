@@ -13,6 +13,9 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Tuple
 
+import pytest
+from tqdm import tqdm
+
 from src.graph.dijkstra import dijkstra
 from src.graph.load_graph import Graph, load_graph
 from src.nlp.extract_stations import StationExtractionResult, extract_stations
@@ -236,7 +239,9 @@ def evaluate_strategies() -> Tuple[List[TestResult], List[StrategyMetrics]]:
                 "results": [],
             }
 
-            for sentence_id, sentence, expected_output in sentences:
+            for sentence_id, sentence, expected_output in tqdm(
+                sentences, desc=f"Pipeline [{nlp_name}+{path_name}]"
+            ):
                 (
                     message,
                     nlp_time,
@@ -727,6 +732,7 @@ def generate_pdf_report(
     doc.build(story)
 
 
+@pytest.mark.slow
 def test_evaluate_all_strategies():
     """Main test function that evaluates strategies and generates PDF report."""
     # Ensure results directory exists
