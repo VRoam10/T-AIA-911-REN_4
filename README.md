@@ -114,13 +114,22 @@ At this stade :
 
 Some modules (intention detection, generic text input, automated testing) are still in the skeleton stage and will be completed in subsequent stages of the project.
 
-## Run Tests on the Pipeline
-
-This command runs the test strategies that test the pipeline, the NLP and the path finder and generates a pdf file of the result.
+## Run Tests
 
 ```bash
-pytest tests/test_strategies_evaluation.py -v
+# Fast tests only (~10-15s, recommended for development)
+pytest -n auto -m "not slow"
+
+# Full suite including evaluations (~20 min, or ~10 min with -n 2)
+pytest -n 2
+
+# Only evaluation tests (generates PDF reports in test_results/)
+pytest -m slow
 ```
+
+The test suite includes:
+- **Fast tests** (~88 tests): Unit and integration tests
+- **Slow tests** (2 tests marked `@pytest.mark.slow`): NLP and pipeline evaluations on 10K sentences
 
 ### Generate the dataset
 
