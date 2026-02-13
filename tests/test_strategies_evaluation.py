@@ -37,6 +37,25 @@ NLP_STRATEGIES: Dict[str, StationExtractor] = {
     "hf_ner": extract_stations_hf,
 }
 
+# Register fine-tuned NER if model is available
+_finetuned_ner_model_path = (
+    Path(__file__).resolve().parent.parent / "training" / "models" / "ner-camembert"
+)
+if _finetuned_ner_model_path.exists():
+    from src.adapters.nlp.finetuned_ner_adapter import FineTunedNERAdapter
+
+    _finetuned_ner = FineTunedNERAdapter(model_path=str(_finetuned_ner_model_path))
+
+    def _extract_stations_finetuned(sentence: str) -> StationExtractionResult:
+        result = _finetuned_ner.extract(sentence)
+        return StationExtractionResult(
+            departure=result.departure,
+            arrival=result.arrival,
+            error=result.error,
+        )
+
+    NLP_STRATEGIES["finetuned_ner"] = _extract_stations_finetuned
+
 PATH_FINDER_STRATEGIES: Dict[str, PathFinder] = {
     "dijkstra": dijkstra,
 }

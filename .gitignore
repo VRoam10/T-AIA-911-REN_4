@@ -7,3 +7,7 @@ env
 .mypy_cache/
 data/ner.csv
 generated_sentences.csv
+training/models/*/
+!training/models/.gitkeep
+training/data/intent_dataset/
+training/data/ner_dataset/
