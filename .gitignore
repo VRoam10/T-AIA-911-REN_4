@@ -11,3 +11,7 @@ generated_sentences.csv
 trajectory.html
 .claude/
 .cache/
+training/models/*/
+!training/models/.gitkeep
+training/data/intent_dataset/
+training/data/ner_dataset/

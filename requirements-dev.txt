@@ -34,5 +34,9 @@ tiktoken
 sentencepiece
 transformers[sentencepiece]
 protobuf
+datasets
+seqeval
+accelerate
+scikit-learn
 types-requests
 types-dateparser
