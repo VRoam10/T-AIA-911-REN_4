@@ -61,11 +61,11 @@ StationExtractorFn = Callable[[str], StationExtractionResult]
 IntentClassifierFn = Callable[[str], Intent]
 
 EXTRACTION_STRATEGIES: Dict[str, StationExtractorFn] = {
-    "rule_based": extract_stations,
-    "hf_ner": extract_stations_hf,
+    # "rule_based": extract_stations,
+    # "hf_ner": extract_stations_hf,
 }
-if _SPACY_AVAILABLE:
-    EXTRACTION_STRATEGIES["spacy"] = extract_stations_spacy
+# if _SPACY_AVAILABLE:
+# EXTRACTION_STRATEGIES["spacy"] = extract_stations_spacy
 
 if _FINETUNED_NER_AVAILABLE:
     from src.adapters.nlp.finetuned_ner_adapter import FineTunedNERAdapter
@@ -86,7 +86,7 @@ if _FINETUNED_NER_AVAILABLE:
     EXTRACTION_STRATEGIES["finetuned_ner"] = _extract_stations_finetuned
 
 INTENT_STRATEGIES: Dict[str, IntentClassifierFn] = {
-    "rule_based": detect_intent,
+    # "rule_based": detect_intent,
 }
 
 
@@ -104,7 +104,8 @@ class EvalCase:
 if _FINETUNED_INTENT_AVAILABLE:
     from src.adapters.nlp.finetuned_intent_adapter import FineTunedIntentClassifier
 
-    _finetuned_intent = FineTunedIntentClassifier(model_path=_finetuned_intent_model)
+    _finetuned_intent = FineTunedIntentClassifier(
+        model_path=_finetuned_intent_model)
 
     def _classify_intent_finetuned(sentence: str) -> Intent:
         domain_intent = _finetuned_intent.classify(sentence)
@@ -395,7 +396,8 @@ def evaluate_intent() -> Tuple[List[IntentTestResult], List[Dict]]:
 
         # Macro and weighted F1
         macro_f1 = (
-            statistics.mean([m["f1"] for m in per_class.values()]) if per_class else 0.0
+            statistics.mean([m["f1"]
+                            for m in per_class.values()]) if per_class else 0.0
         )
         weighted_f1 = _sdiv(
             sum(m["f1"] * m["support"] for m in per_class.values()),
@@ -610,16 +612,20 @@ def generate_nlp_pdf(
 
     # ===== EXTRACTION COMPARISON TABLE =====
     if len(ext_metrics) > 1:
-        story.append(Paragraph("Extraction Strategy Comparison", heading_style))
+        story.append(
+            Paragraph("Extraction Strategy Comparison", heading_style))
         cmp_data = [["Metric"] + [m["strategy"].upper() for m in ext_metrics]]
         cmp_data.append(
             ["Accuracy"] + [f"{m['accuracy'] * 100:.1f}%" for m in ext_metrics]
         )
         cmp_data.append(
-            ["Precision"] + [f"{m['precision'] * 100:.1f}%" for m in ext_metrics]
+            ["Precision"] +
+            [f"{m['precision'] * 100:.1f}%" for m in ext_metrics]
         )
-        cmp_data.append(["Recall"] + [f"{m['recall'] * 100:.1f}%" for m in ext_metrics])
-        cmp_data.append(["F1"] + [f"{m['f1'] * 100:.1f}%" for m in ext_metrics])
+        cmp_data.append(
+            ["Recall"] + [f"{m['recall'] * 100:.1f}%" for m in ext_metrics])
+        cmp_data.append(
+            ["F1"] + [f"{m['f1'] * 100:.1f}%" for m in ext_metrics])
         cmp_data.append(
             ["Mean Time"]
             + [f"{m['timing']['mean'] * 1000:.1f} ms" for m in ext_metrics]
@@ -629,7 +635,8 @@ def generate_nlp_pdf(
             + [f"{m['timing']['median'] * 1000:.1f} ms" for m in ext_metrics]
         )
         cmp_data.append(
-            ["P95 Time"] + [f"{m['timing']['p95'] * 1000:.1f} ms" for m in ext_metrics]
+            ["P95 Time"] +
+            [f"{m['timing']['p95'] * 1000:.1f} ms" for m in ext_metrics]
         )
 
         col_w = [1.5 * inch] + [1.5 * inch] * len(ext_metrics)
@@ -643,7 +650,8 @@ def generate_nlp_pdf(
 
     for m in int_metrics:
         story.append(
-            Paragraph(f"{m['strategy'].upper()} Classifier", styles["Heading3"])
+            Paragraph(f"{m['strategy'].upper()} Classifier",
+                      styles["Heading3"])
         )
 
         # Overall metrics
@@ -747,7 +755,8 @@ def test_evaluate_nlp_strategies():
     int_results, int_metrics = evaluate_intent()
 
     pdf_path = RESULTS_DIR / "nlp_evaluation.pdf"
-    generate_nlp_pdf(ext_results, ext_metrics, int_results, int_metrics, pdf_path)
+    generate_nlp_pdf(ext_results, ext_metrics,
+                     int_results, int_metrics, pdf_path)
 
     print(f"\n  PDF report saved to: {pdf_path}")
 

@@ -43,7 +43,7 @@ ExtractionResult = TypedDict(
     },
 )
 
-CityStrategy = Literal["legacy_spacy", "hf_ner"]
+CityStrategy = Literal["legacy_spacy", "hf_ner", "finetuned_ner"]
 DateStrategy = Literal["eds", "hf_ner"]
 
 # ===================== Geocoder init (robust) =====================
@@ -176,13 +176,19 @@ def extract_departure_and_destinations(text: str, cities: List[CityDict]) -> Rou
     return route
 
 
+_FINETUNED_NER_INSTANCE: Any = None
+
+
 def extract_locations_by_strategy(text: str, strategy: CityStrategy) -> List[str]:
     """
     Strategy router for location extraction.
 
     - legacy_spacy: spaCy only
     - hf_ner: HF CamemBERT NER only (requires transformers + sentencepiece)
+    - finetuned_ner: Fine-tuned CamemBERT NER with BIO tags
     """
+    global _FINETUNED_NER_INSTANCE
+
     if strategy == "legacy_spacy":
         return extract_locations_spacy(text)
 
@@ -192,6 +198,17 @@ def extract_locations_by_strategy(text: str, strategy: CityStrategy) -> List[str
         except Exception:
             # If HF fails (tokenizer/version), fallback to spaCy
             return extract_locations_spacy(text)
+
+    if strategy == "finetuned_ner":
+        try:
+            from src.adapters.nlp.finetuned_ner_adapter import FineTunedNERAdapter
+
+            if _FINETUNED_NER_INSTANCE is None:
+                _FINETUNED_NER_INSTANCE = FineTunedNERAdapter()
+            return list(_FINETUNED_NER_INSTANCE.extract_locations(text))
+        except Exception:
+            return extract_locations_spacy(text)
+
     raise ValueError(f"Unknown city strategy: {strategy!r}")
 
 

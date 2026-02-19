@@ -609,26 +609,55 @@ from typing import Any, Callable, Dict, Union
 # Import the domain Intent for type hinting
 from ..domain.models import Intent as DomainIntent
 
-# Type alias for intent classifiers (both legacy and domain Intent are compatible at runtime)
-IntentClassifier = Callable[[str], Union[Intent, DomainIntent]]
+# Type alias for intent classifiers
+IntentClassifier = Callable[[str], Intent]
 
 INTENT_STRATEGIES: Dict[str, IntentClassifier] = {
     "rule_based": detect_intent,
 }
+
+# Module-level singletons to avoid reloading transformer models per request
+_HF_XNLI_INSTANCE: Any = None
+_FINETUNED_INTENT_INSTANCE: Any = None
+
+_DOMAIN_TO_LEGACY: Dict[str, Intent] = {
+    "TRIP": Intent.TRIP,
+    "NOT_TRIP": Intent.NOT_TRIP,
+    "NOT_FRENCH": Intent.NOT_FRENCH,
+    "UNKNOWN": Intent.UNKNOWN,
+}
+
+
+def _domain_intent_to_legacy(domain_intent: DomainIntent) -> Intent:
+    """Map a domain.models.Intent to the legacy nlp.intent.Intent."""
+    return _DOMAIN_TO_LEGACY.get(domain_intent.name, Intent.UNKNOWN)
 
 
 def get_intent_classifier(strategy: str = "rule_based") -> IntentClassifier:
     """Get intent classifier by strategy name.
 
     Args:
-        strategy: Strategy name ('rule_based' or 'hf_xnli')
+        strategy: Strategy name ('rule_based', 'hf_xnli', or 'finetuned_intent')
 
     Returns:
         A callable that takes a sentence and returns an Intent.
     """
+    global _HF_XNLI_INSTANCE, _FINETUNED_INTENT_INSTANCE
+
     if strategy == "hf_xnli":
         from ..adapters.nlp.hf_intent_adapter import HuggingFaceIntentClassifier
 
-        classifier = HuggingFaceIntentClassifier()
-        return classifier.classify
+        if _HF_XNLI_INSTANCE is None:
+            _HF_XNLI_INSTANCE = HuggingFaceIntentClassifier()
+        adapter = _HF_XNLI_INSTANCE
+        return lambda sentence: _domain_intent_to_legacy(adapter.classify(sentence))
+
+    if strategy == "finetuned_intent":
+        from ..adapters.nlp.finetuned_intent_adapter import FineTunedIntentClassifier
+
+        if _FINETUNED_INTENT_INSTANCE is None:
+            _FINETUNED_INTENT_INSTANCE = FineTunedIntentClassifier()
+        adapter = _FINETUNED_INTENT_INSTANCE
+        return lambda sentence: _domain_intent_to_legacy(adapter.classify(sentence))
+
     return INTENT_STRATEGIES.get(strategy, detect_intent)

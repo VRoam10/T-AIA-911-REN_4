@@ -13,7 +13,7 @@ modules.
 """
 
 from pathlib import Path
-from typing import Callable, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 from .graph.dijkstra import dijkstra
 from .graph.load_graph import Graph, load_graph
@@ -32,10 +32,24 @@ EDGES_CSV = DATA_DIR / "edges.csv"
 StationExtractor = Callable[[str], StationExtractionResult]
 PathFinder = Callable[[Graph, str, str], Tuple[list[str], float]]
 
+_FINETUNED_NER_ADAPTER: Any = None
+
+
+def _extract_stations_finetuned(sentence: str) -> StationExtractionResult:
+    """Extract stations using fine-tuned CamemBERT NER (singleton)."""
+    global _FINETUNED_NER_ADAPTER
+    from .adapters.nlp.finetuned_ner_adapter import FineTunedNERAdapter
+
+    if _FINETUNED_NER_ADAPTER is None:
+        _FINETUNED_NER_ADAPTER = FineTunedNERAdapter()
+    return _FINETUNED_NER_ADAPTER.extract(sentence)
+
+
 NLP_STRATEGIES: Dict[str, StationExtractor] = {
     "rule_based": extract_stations,
     "legacy_spacy": extract_stations_spacy,
     "hf_ner": extract_stations_hf,
+    "finetuned_ner": _extract_stations_finetuned,
 }
 
 PATH_FINDER_STRATEGIES: Dict[str, PathFinder] = {
