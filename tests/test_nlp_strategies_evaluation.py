@@ -7,6 +7,7 @@ and timing percentiles (mean, median, P95, std).
 """
 
 import csv
+import os
 import statistics
 import time
 from collections import Counter
@@ -28,7 +29,8 @@ try:
 except Exception:
     _SPACY_AVAILABLE = False
 
-CSV_PATH = Path(__file__).resolve().parent / "data" / "generated_sentences.csv"
+_DATASET_NAME = os.environ.get("TOR_EVAL_DATASET", "eval_10k.csv")
+CSV_PATH = Path(__file__).resolve().parent / "data" / _DATASET_NAME
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "test_results"
 
 # ---------------------------------------------------------------------------
@@ -48,12 +50,15 @@ INTENT_STRATEGIES: Dict[str, IntentClassifierFn] = {
     "rule_based": detect_intent,
 }
 
-_EXPECTED_TO_INTENT: Dict[str, str] = {
-    "CORRECT": "TRIP",
-    "NOT_TRIP": "NOT_TRIP",
-    "NOT_FRENCH": "NOT_FRENCH",
-    "UNKNOWN": "UNKNOWN",
-}
+@dataclass(frozen=True)
+class EvalCase:
+    """Single evaluation case loaded from an eval_*.csv file."""
+
+    case_id: str
+    text: str
+    intent_gt: str
+    departure_gt: str | None
+    arrival_gt: str | None
 
 
 # ---------------------------------------------------------------------------
@@ -92,14 +97,22 @@ class IntentTestResult:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _load_sentences() -> List[Tuple[str, str, str]]:
-    """Load test sentences from CSV."""
+def _load_sentences() -> List[EvalCase]:
+    """Load evaluation cases from a committed eval dataset CSV."""
     with CSV_PATH.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        return [
-            (row["sentenceID"], row["sentence"], row["expected_output"])
-            for row in reader
-        ]
+        cases: List[EvalCase] = []
+        for row in reader:
+            cases.append(
+                EvalCase(
+                    case_id=row["case_id"],
+                    text=row["text"],
+                    intent_gt=row["intent_gt"],
+                    departure_gt=row.get("departure_gt") or None,
+                    arrival_gt=row.get("arrival_gt") or None,
+                )
+            )
+        return cases
 
 
 def _timing_stats(times: List[float]) -> Dict[str, float]:
@@ -126,20 +139,22 @@ def _sdiv(n: float, d: float) -> float:
 # ---------------------------------------------------------------------------
 # Extraction evaluation
 # ---------------------------------------------------------------------------
-def _check_extraction(result: StationExtractionResult, expected: str) -> bool:
-    """Check if extraction result matches expected output."""
-    if expected == "CORRECT":
+def _check_extraction(result: StationExtractionResult, case: EvalCase) -> bool:
+    """Check if extraction output matches the eval dataset ground truth."""
+    if case.intent_gt == "TRIP":
         return (
-            result.departure is not None
-            and result.arrival is not None
-            and result.error is None
+            result.error is None
+            and result.departure == case.departure_gt
+            and result.arrival == case.arrival_gt
         )
-    elif expected in ("NOT_TRIP", "NOT_FRENCH"):
+
+    if case.intent_gt in ("NOT_TRIP", "NOT_FRENCH"):
         return (
             result.error is not None
             or result.departure is None
             or result.arrival is None
         )
+
     return False
 
 
@@ -153,9 +168,9 @@ def evaluate_extraction() -> Tuple[List[ExtractionTestResult], List[Dict]]:
         results: List[ExtractionTestResult] = []
         times: List[float] = []
 
-        for sid, sent, expected in tqdm(sentences, desc=f"Extraction [{name}]"):
+        for case in tqdm(sentences, desc=f"Extraction [{name}]"):
             t0 = time.perf_counter()
-            ext = extractor(sent)
+            ext = extractor(case.text)
             elapsed = time.perf_counter() - t0
             times.append(elapsed)
 
@@ -169,14 +184,14 @@ def evaluate_extraction() -> Tuple[List[ExtractionTestResult], List[Dict]]:
                 and ext.error is None
                 and (ext.departure is not None or ext.arrival is not None)
             )
-            passed = _check_extraction(ext, expected)
+            passed = _check_extraction(ext, case)
 
             results.append(
                 ExtractionTestResult(
-                    sentence_id=sid,
-                    sentence=sent,
+                    sentence_id=case.case_id,
+                    sentence=case.text,
                     strategy=name,
-                    expected_output=expected,
+                    expected_output=case.intent_gt,
                     execution_time=elapsed,
                     departure=ext.departure,
                     arrival=ext.arrival,
@@ -196,12 +211,10 @@ def evaluate_extraction() -> Tuple[List[ExtractionTestResult], List[Dict]]:
         partial_ct = sum(r.is_partial for r in results)
         error_ct = sum(1 for r in results if r.error is not None)
 
-        # Binary classification: CORRECT as positive (extraction succeeds)
-        tp = sum(1 for r in results if r.expected_output == "CORRECT" and r.is_complete)
-        fp = sum(1 for r in results if r.expected_output != "CORRECT" and r.is_complete)
-        fn = sum(
-            1 for r in results if r.expected_output == "CORRECT" and not r.is_complete
-        )
+        # Binary classification: TRIP as positive (exact-match extraction)
+        tp = sum(1 for r in results if r.expected_output == "TRIP" and r.passed)
+        fp = sum(1 for r in results if r.expected_output != "TRIP" and r.is_complete)
+        fn = sum(1 for r in results if r.expected_output == "TRIP" and not r.passed)
         prec = _sdiv(tp, tp + fp)
         rec = _sdiv(tp, tp + fn)
         f1 = _sdiv(2 * prec * rec, prec + rec)
@@ -249,11 +262,10 @@ def evaluate_intent() -> Tuple[List[IntentTestResult], List[Dict]]:
         results: List[IntentTestResult] = []
         times: List[float] = []
 
-        for sid, sent, expected in tqdm(sentences, desc=f"Intent [{name}]"):
-            exp_intent = _EXPECTED_TO_INTENT.get(expected, "UNKNOWN")
-
+        for case in tqdm(sentences, desc=f"Intent [{name}]"):
+            exp_intent = case.intent_gt
             t0 = time.perf_counter()
-            intent = classifier(sent)
+            intent = classifier(case.text)
             elapsed = time.perf_counter() - t0
             times.append(elapsed)
 
@@ -262,8 +274,8 @@ def evaluate_intent() -> Tuple[List[IntentTestResult], List[Dict]]:
 
             results.append(
                 IntentTestResult(
-                    sentence_id=sid,
-                    sentence=sent,
+                    sentence_id=case.case_id,
+                    sentence=case.text,
                     strategy=name,
                     expected_intent=exp_intent,
                     predicted_intent=pred_intent,
