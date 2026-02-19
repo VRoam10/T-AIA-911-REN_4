@@ -53,9 +53,13 @@ python -c "from src.container import Container; ..."  # See examples below
 python -m src.pipeline          # Demo pipeline
 python -m apps.app              # Gradio UI
 
-# Test
-pytest                                          # All tests (73 pass)
-pytest --cov=src --cov-report=term-missing     # With coverage
+# Test (fast, recommended for development)
+pytest -n auto -m "not slow"                    # Fast tests only (~10-15s)
+pytest -n auto -m "not slow" --cov=src --cov-report=term-missing  # With coverage
+
+# Test (full suite including 10K-sentence evaluations)
+pytest -n 2                                     # All tests in parallel (~10 min)
+pytest -m slow                                  # Only slow evaluation tests
 
 # Lint
 black . && isort . && mypy .

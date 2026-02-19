@@ -57,7 +57,11 @@ class TestHuggingFaceIntentClassifier:
         """Travel request should return TRIP."""
         clf, mock_pipeline = classifier_with_mock
         mock_pipeline.return_value = {
-            "labels": ["demande de voyage", "autre demande", "texte non français"],
+            "labels": [
+                "demande de voyage en français",
+                "texte en français sans demande de voyage",
+                "texte non français",
+            ],
             "scores": [0.9, 0.05, 0.05],
         }
 
@@ -68,7 +72,11 @@ class TestHuggingFaceIntentClassifier:
         """Non-travel French request should return NOT_TRIP."""
         clf, mock_pipeline = classifier_with_mock
         mock_pipeline.return_value = {
-            "labels": ["autre demande", "demande de voyage", "texte non français"],
+            "labels": [
+                "texte en français sans demande de voyage",
+                "demande de voyage en français",
+                "texte non français",
+            ],
             "scores": [0.85, 0.1, 0.05],
         }
 
@@ -90,7 +98,11 @@ class TestHuggingFaceIntentClassifier:
         """Low confidence scores should return UNKNOWN."""
         clf, mock_pipeline = classifier_with_mock
         mock_pipeline.return_value = {
-            "labels": ["demande de voyage", "autre demande", "texte non français"],
+            "labels": [
+                "demande de voyage en français",
+                "texte en français sans demande de voyage",
+                "texte non français",
+            ],
             "scores": [0.35, 0.33, 0.32],
         }
 
@@ -103,7 +115,11 @@ class TestHuggingFaceIntentClassifier:
 
         mock_pipeline = MagicMock()
         mock_pipeline.return_value = {
-            "labels": ["demande de voyage", "autre demande", "texte non français"],
+            "labels": [
+                "demande de voyage en français",
+                "texte en français sans demande de voyage",
+                "texte non français",
+            ],
             "scores": [0.6, 0.3, 0.1],
         }
 

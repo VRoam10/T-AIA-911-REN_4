@@ -52,6 +52,29 @@ This data:
 - is used solely to verify that the basic pipeline is functioning;
 - may be replaced later by a richer or more realistic dataset.
 
+## Recompute edges with real road distances
+
+You can keep the existing edge topology and recompute `distance_km` from real
+road routing (OSRM) using station coordinates from `data/stations.csv`.
+
+From the project root (`T-AIA-911-REN_4`), run:
+
+```bash
+python scripts/recompute_edge_distances.py \
+  --stations data/stations.csv \
+  --edges data/edges.csv \
+  --output data/edges.real.csv
+```
+
+Useful options:
+
+- `--overwrite-input`: replace `data/edges.csv` directly.
+- `--limit 100`: test on first 100 edges.
+- `--keep-old-on-failure`: preserve old distance for failed routes.
+
+The script stores a persistent cache in `.cache/edge_distances_osrm.json` so it
+can resume after interruptions.
+
 ## Launching the pipeline
 
 ### Prerequisites
@@ -114,13 +137,22 @@ At this stade :
 
 Some modules (intention detection, generic text input, automated testing) are still in the skeleton stage and will be completed in subsequent stages of the project.
 
-## Run Tests on the Pipeline
-
-This command runs the test strategies that test the pipeline, the NLP and the path finder and generates a pdf file of the result.
+## Run Tests
 
 ```bash
-pytest tests/test_strategies_evaluation.py -v
+# Fast tests only (~10-15s, recommended for development)
+pytest -n auto -m "not slow"
+
+# Full suite including evaluations (~20 min, or ~10 min with -n 2)
+pytest -n 2
+
+# Only evaluation tests (generates PDF reports in test_results/)
+pytest -m slow
 ```
+
+The test suite includes:
+- **Fast tests** (~88 tests): Unit and integration tests
+- **Slow tests** (2 tests marked `@pytest.mark.slow`): NLP and pipeline evaluations on 10K sentences
 
 ### Generate the dataset
 

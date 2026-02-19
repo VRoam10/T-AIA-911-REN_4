@@ -14,6 +14,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Tuple
 
+import pytest
+from tqdm import tqdm
+
 from src.nlp.extract_stations import StationExtractionResult, extract_stations
 from src.nlp.hf_ner import extract_stations_hf
 from src.nlp.intent import Intent, detect_intent
@@ -150,7 +153,7 @@ def evaluate_extraction() -> Tuple[List[ExtractionTestResult], List[Dict]]:
         results: List[ExtractionTestResult] = []
         times: List[float] = []
 
-        for sid, sent, expected in sentences:
+        for sid, sent, expected in tqdm(sentences, desc=f"Extraction [{name}]"):
             t0 = time.perf_counter()
             ext = extractor(sent)
             elapsed = time.perf_counter() - t0
@@ -246,7 +249,7 @@ def evaluate_intent() -> Tuple[List[IntentTestResult], List[Dict]]:
         results: List[IntentTestResult] = []
         times: List[float] = []
 
-        for sid, sent, expected in sentences:
+        for sid, sent, expected in tqdm(sentences, desc=f"Intent [{name}]"):
             exp_intent = _EXPECTED_TO_INTENT.get(expected, "UNKNOWN")
 
             t0 = time.perf_counter()
@@ -663,6 +666,7 @@ def generate_nlp_pdf(
 # ---------------------------------------------------------------------------
 # Test entry point
 # ---------------------------------------------------------------------------
+@pytest.mark.slow
 def test_evaluate_nlp_strategies():
     """Evaluate NLP strategies and generate PDF report."""
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
