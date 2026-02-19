@@ -154,10 +154,17 @@ The test suite includes:
 - **Fast tests** (~88 tests): Unit and integration tests
 - **Slow tests** (2 tests marked `@pytest.mark.slow`): NLP and pipeline evaluations on 10K sentences
 
-### Generate the dataset
+### Evaluation datasets
+
+Evaluation datasets are committed under `tests/data/`:
+- `eval_10k.csv` (default, closest to final benchmark)
+- `eval_500.csv` (smaller, faster local iteration)
+- `eval_edge_500.csv` (edge/ambiguous-heavy subset)
+
+Select which dataset the slow evaluation tests use:
 
 ```bash
-pytest tests/data/generation.py
+TOR_EVAL_DATASET=eval_500.csv pytest -m slow
 ```
 
 ## Quick Setup

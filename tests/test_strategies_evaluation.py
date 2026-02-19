@@ -6,6 +6,7 @@ a comprehensive results report in PDF format for deliveries.
 
 import csv
 import json
+import os
 import statistics
 import time
 from collections import defaultdict
@@ -21,7 +22,8 @@ from src.graph.load_graph import Graph, load_graph
 from src.nlp.extract_stations import StationExtractionResult, extract_stations
 from src.nlp.hf_ner import extract_stations_hf
 
-CSV_PATH = Path(__file__).resolve().parent / "data" / "generated_sentences.csv"
+_DATASET_NAME = os.environ.get("TOR_EVAL_DATASET", "eval_10k.csv")
+CSV_PATH = Path(__file__).resolve().parent / "data" / _DATASET_NAME
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 STATIONS_CSV = DATA_DIR / "stations.csv"
 EDGES_CSV = DATA_DIR / "edges.csv"
@@ -50,7 +52,9 @@ class TestResult:
     sentence: str
     nlp_strategy: str
     path_strategy: str
-    expected_output: str
+    expected_output: str  # intent_gt (TRIP / NOT_TRIP / NOT_FRENCH)
+    departure_gt: str | None
+    arrival_gt: str | None
     nlp_execution_time: float
     path_execution_time: float
     total_execution_time: float
@@ -86,7 +90,7 @@ class StrategyMetrics:
     path_avg_time: float = 0.0
     path_median_time: float = 0.0
     path_p95_time: float = 0.0
-    # Binary classification (CORRECT as positive)
+    # Binary classification (TRIP as positive)
     precision: float = 0.0
     recall: float = 0.0
     f1: float = 0.0
@@ -94,28 +98,54 @@ class StrategyMetrics:
     per_category_accuracy: Dict[str, float] = field(default_factory=dict)
 
 
-def load_sentences() -> List[Tuple[str, str, str]]:
-    """Load test sentences from CSV."""
+@dataclass(frozen=True)
+class EvalCase:
+    """Single evaluation case loaded from an eval_*.csv file."""
+
+    case_id: str
+    text: str
+    intent_gt: str
+    departure_gt: str | None
+    arrival_gt: str | None
+
+
+def load_sentences() -> List[EvalCase]:
+    """Load evaluation cases from a committed eval dataset CSV."""
     with CSV_PATH.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        return [
-            (row["sentenceID"], row["sentence"], row["expected_output"])
-            for row in reader
-        ]
+        cases: List[EvalCase] = []
+        for row in reader:
+            cases.append(
+                EvalCase(
+                    case_id=row["case_id"],
+                    text=row["text"],
+                    intent_gt=row["intent_gt"],
+                    departure_gt=row.get("departure_gt") or None,
+                    arrival_gt=row.get("arrival_gt") or None,
+                )
+            )
+        return cases
 
 
-def validate_result(message: str, expected_output: str) -> bool:
-    """Check if the result matches expected output."""
-    if expected_output == "CORRECT":
-        return (
-            "," in message
-            and "Extraction error" not in message
-            and "No path found" not in message
-        )
-    elif expected_output == "NOT_TRIP":
-        return "No path found" in message or "Extraction error" in message
-    elif expected_output == "NOT_FRENCH":
-        return "Extraction error" in message
+def validate_result(
+    *,
+    case: EvalCase,
+    departure: str | None,
+    arrival: str | None,
+    path: list[str] | None,
+    error: str | None,
+) -> bool:
+    """Validate the pipeline output against the eval dataset ground truth."""
+    if case.intent_gt == "TRIP":
+        if error is not None:
+            return False
+        if not path:
+            return False
+        return departure == case.departure_gt and arrival == case.arrival_gt
+
+    if case.intent_gt in ("NOT_TRIP", "NOT_FRENCH"):
+        return error is not None or not path
+
     return False
 
 
@@ -239,9 +269,7 @@ def evaluate_strategies() -> Tuple[List[TestResult], List[StrategyMetrics]]:
                 "results": [],
             }
 
-            for sentence_id, sentence, expected_output in tqdm(
-                sentences, desc=f"Pipeline [{nlp_name}+{path_name}]"
-            ):
+            for case in tqdm(sentences, desc=f"Pipeline [{nlp_name}+{path_name}]"):
                 (
                     message,
                     nlp_time,
@@ -251,17 +279,25 @@ def evaluate_strategies() -> Tuple[List[TestResult], List[StrategyMetrics]]:
                     path,
                     distance,
                     error,
-                ) = run_pipeline(sentence, nlp_name, path_name)
+                ) = run_pipeline(case.text, nlp_name, path_name)
 
                 total_time = nlp_time + path_time
-                passed = validate_result(message, expected_output)
+                passed = validate_result(
+                    case=case,
+                    departure=departure,
+                    arrival=arrival,
+                    path=path,
+                    error=error,
+                )
 
                 test_result = TestResult(
-                    sentence_id=sentence_id,
-                    sentence=sentence,
+                    sentence_id=case.case_id,
+                    sentence=case.text,
                     nlp_strategy=nlp_name,
                     path_strategy=path_name,
-                    expected_output=expected_output,
+                    expected_output=case.intent_gt,
+                    departure_gt=case.departure_gt,
+                    arrival_gt=case.arrival_gt,
                     nlp_execution_time=nlp_time,
                     path_execution_time=path_time,
                     total_execution_time=total_time,
@@ -278,11 +314,11 @@ def evaluate_strategies() -> Tuple[List[TestResult], List[StrategyMetrics]]:
                 d["total_times"].append(total_time)
                 d["nlp_times"].append(nlp_time)
                 d["path_times"].append(path_time)
-                d["total_by_cat"][expected_output] += 1
+                d["total_by_cat"][case.intent_gt] += 1
                 d["results"].append(test_result)
                 if passed:
                     d["passed"] += 1
-                    d["passed_by_cat"][expected_output] += 1
+                    d["passed_by_cat"][case.intent_gt] += 1
 
     # Compute aggregated metrics
     strategy_metrics: List[StrategyMetrics] = []
@@ -298,16 +334,29 @@ def evaluate_strategies() -> Tuple[List[TestResult], List[StrategyMetrics]]:
         for cat in sorted(d["total_by_cat"].keys()):
             per_cat[cat] = _safe_div(d["passed_by_cat"][cat], d["total_by_cat"][cat])
 
-        # Binary P/R/F1: CORRECT as positive class
-        # TP = expected CORRECT and passed (pipeline succeeded)
-        # FP = expected NOT_CORRECT and NOT passed (pipeline succeeded when it shouldn't)
-        # FN = expected CORRECT and NOT passed (pipeline failed when it should succeed)
-        tp = sum(1 for r in d["results"] if r.expected_output == "CORRECT" and r.passed)
+        # Binary P/R/F1: TRIP as positive class
+        # TP = TRIP and exact-match route produced
+        # FP = NOT_TRIP/NOT_FRENCH but a route was produced anyway
+        # FN = TRIP but no exact-match route
+        def _exact_trip_success(r: TestResult) -> bool:
+            return (
+                r.expected_output == "TRIP"
+                and r.error is None
+                and bool(r.path)
+                and r.departure == r.departure_gt
+                and r.arrival == r.arrival_gt
+            )
+
+        tp = sum(1 for r in d["results"] if _exact_trip_success(r))
         fp = sum(
-            1 for r in d["results"] if r.expected_output != "CORRECT" and not r.passed
+            1
+            for r in d["results"]
+            if r.expected_output != "TRIP" and r.error is None and bool(r.path)
         )
         fn = sum(
-            1 for r in d["results"] if r.expected_output == "CORRECT" and not r.passed
+            1
+            for r in d["results"]
+            if r.expected_output == "TRIP" and not _exact_trip_success(r)
         )
         prec = _safe_div(tp, tp + fp)
         rec = _safe_div(tp, tp + fn)
