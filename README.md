@@ -52,6 +52,29 @@ This data:
 - is used solely to verify that the basic pipeline is functioning;
 - may be replaced later by a richer or more realistic dataset.
 
+## Recompute edges with real road distances
+
+You can keep the existing edge topology and recompute `distance_km` from real
+road routing (OSRM) using station coordinates from `data/stations.csv`.
+
+From the project root (`T-AIA-911-REN_4`), run:
+
+```bash
+python scripts/recompute_edge_distances.py \
+  --stations data/stations.csv \
+  --edges data/edges.csv \
+  --output data/edges.real.csv
+```
+
+Useful options:
+
+- `--overwrite-input`: replace `data/edges.csv` directly.
+- `--limit 100`: test on first 100 edges.
+- `--keep-old-on-failure`: preserve old distance for failed routes.
+
+The script stores a persistent cache in `.cache/edge_distances_osrm.json` so it
+can resume after interruptions.
+
 ## Launching the pipeline
 
 ### Prerequisites
