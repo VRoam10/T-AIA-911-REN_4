@@ -7,3 +7,5 @@ env
 .mypy_cache/
 data/ner.csv
 generated_sentences.csv
+.claude/
+.cache/
