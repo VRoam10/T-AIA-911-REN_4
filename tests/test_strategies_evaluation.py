@@ -1,11 +1,13 @@
 """Strategy evaluation test that measures performance across different NLP and pathfinding approaches.
 
-This test evaluates all combinations of available strategies and generates
-a comprehensive results report in PDF format for deliveries.
+Evaluates all combinations of intent × NLP × path-finding strategies.
+Intent runs first and gates whether extraction/routing is attempted,
+mirroring the production flow in apps/app.py. Generates a PDF report
+with per-component metrics and comparison bar charts, plus a CSV of
+failures per strategy combination.
 """
 
 import csv
-import json
 import os
 import statistics
 import time
@@ -21,6 +23,14 @@ from src.graph.dijkstra import dijkstra
 from src.graph.load_graph import Graph, load_graph
 from src.nlp.extract_stations import StationExtractionResult, extract_stations
 from src.nlp.hf_ner import extract_stations_hf
+from src.nlp.intent import Intent, detect_intent
+
+try:
+    from src.nlp.legacy_spacy.extractor import extract_stations_spacy
+
+    _SPACY_AVAILABLE = True
+except Exception:
+    _SPACY_AVAILABLE = False
 
 _DATASET_NAME = os.environ.get("TOR_EVAL_DATASET", "eval_10k.csv")
 CSV_PATH = Path(__file__).resolve().parent / "data" / _DATASET_NAME
@@ -30,16 +40,29 @@ EDGES_CSV = DATA_DIR / "edges.csv"
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "test_results"
 
 
+# ---------------------------------------------------------------------------
 # Strategy registries
+# ---------------------------------------------------------------------------
 StationExtractor = Callable[[str], StationExtractionResult]
 PathFinder = Callable[[Graph, str, str], Tuple[list[str], float]]
+IntentClassifier = Callable[[str], Intent]
 
 NLP_STRATEGIES: Dict[str, StationExtractor] = {
     "rule_based": extract_stations,
     "hf_ner": extract_stations_hf,
 }
+if _SPACY_AVAILABLE:
+    NLP_STRATEGIES["spacy"] = extract_stations_spacy
 
-# Register fine-tuned NER if model is available
+INTENT_STRATEGIES: Dict[str, IntentClassifier] = {
+    "rule_based": detect_intent,
+}
+
+PATH_FINDER_STRATEGIES: Dict[str, PathFinder] = {
+    "dijkstra": dijkstra,
+}
+
+# Register fine-tuned models if available
 _finetuned_ner_model_path = (
     Path(__file__).resolve().parent.parent / "training" / "models" / "ner-camembert"
 )
@@ -58,65 +81,26 @@ if _finetuned_ner_model_path.exists():
 
     NLP_STRATEGIES["finetuned_ner"] = _extract_stations_finetuned
 
-PATH_FINDER_STRATEGIES: Dict[str, PathFinder] = {
-    "dijkstra": dijkstra,
-}
+_finetuned_intent_model_path = (
+    Path(__file__).resolve().parent.parent / "training" / "models" / "intent-camembert"
+)
+if _finetuned_intent_model_path.exists():
+    from src.adapters.nlp.finetuned_intent_adapter import FineTunedIntentClassifier
+
+    _finetuned_intent = FineTunedIntentClassifier(
+        model_path=str(_finetuned_intent_model_path)
+    )
+
+    def _classify_intent_finetuned(sentence: str) -> Intent:
+        domain_intent = _finetuned_intent.classify(sentence)
+        return Intent[domain_intent.name]
+
+    INTENT_STRATEGIES["finetuned_intent"] = _classify_intent_finetuned
 
 
-@dataclass
-class TestResult:
-    """Individual test result."""
-
-    sentence_id: str
-    sentence: str
-    nlp_strategy: str
-    path_strategy: str
-    expected_output: str  # intent_gt (TRIP / NOT_TRIP / NOT_FRENCH)
-    departure_gt: str | None
-    arrival_gt: str | None
-    nlp_execution_time: float
-    path_execution_time: float
-    total_execution_time: float
-    departure: str | None
-    arrival: str | None
-    path: list[str] | None
-    distance: float | None
-    error: str | None
-    passed: bool
-
-
-@dataclass
-class StrategyMetrics:
-    """Aggregated metrics for a strategy combination."""
-
-    nlp_strategy: str
-    path_strategy: str
-    total_tests: int
-    passed_tests: int
-    failed_tests: int
-    accuracy: float
-    avg_execution_time: float
-    min_execution_time: float
-    max_execution_time: float
-    # Enhanced timing
-    median_execution_time: float = 0.0
-    p95_execution_time: float = 0.0
-    std_execution_time: float = 0.0
-    # Component timing
-    nlp_avg_time: float = 0.0
-    nlp_median_time: float = 0.0
-    nlp_p95_time: float = 0.0
-    path_avg_time: float = 0.0
-    path_median_time: float = 0.0
-    path_p95_time: float = 0.0
-    # Binary classification (TRIP as positive)
-    precision: float = 0.0
-    recall: float = 0.0
-    f1: float = 0.0
-    # Per-category accuracy
-    per_category_accuracy: Dict[str, float] = field(default_factory=dict)
-
-
+# ---------------------------------------------------------------------------
+# Data structures
+# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class EvalCase:
     """Single evaluation case loaded from an eval_*.csv file."""
@@ -128,52 +112,124 @@ class EvalCase:
     arrival_gt: str | None
 
 
+@dataclass
+class TestResult:
+    """Individual test result."""
+
+    sentence_id: str
+    sentence: str
+    intent_strategy: str
+    nlp_strategy: str
+    path_strategy: str
+    expected_intent: str
+    predicted_intent: str
+    departure_gt: str | None
+    arrival_gt: str | None
+    intent_execution_time: float
+    nlp_execution_time: float
+    path_execution_time: float
+    total_execution_time: float
+    departure: str | None
+    arrival: str | None
+    path: list[str] | None
+    distance: float | None
+    error: str | None
+    departure_correct: bool
+    arrival_correct: bool
+    passed: bool
+
+
+@dataclass
+class StrategyMetrics:
+    """Aggregated metrics for a strategy combination."""
+
+    intent_strategy: str
+    nlp_strategy: str
+    path_strategy: str
+    total_tests: int
+    passed_tests: int
+    failed_tests: int
+    accuracy: float
+    avg_execution_time: float
+    min_execution_time: float
+    max_execution_time: float
+    median_execution_time: float = 0.0
+    p95_execution_time: float = 0.0
+    std_execution_time: float = 0.0
+    # Intent classification metrics
+    intent_accuracy: float = 0.0
+    intent_avg_time: float = 0.0
+    intent_p95_time: float = 0.0
+    # NLP extraction metrics (TRIP cases only)
+    trip_total: int = 0
+    departure_correct: int = 0
+    arrival_correct: int = 0
+    both_correct: int = 0
+    departure_accuracy: float = 0.0
+    arrival_accuracy: float = 0.0
+    both_accuracy: float = 0.0
+    nlp_avg_time: float = 0.0
+    nlp_median_time: float = 0.0
+    nlp_p95_time: float = 0.0
+    # Path finding metrics
+    path_total: int = 0  # cases where extraction succeeded
+    paths_found: int = 0  # cases where a path was actually returned
+    paths_found_rate: float = 0.0
+    avg_path_length: float = 0.0  # avg number of stations in path
+    avg_distance: float = 0.0  # avg route distance in km
+    path_avg_time: float = 0.0
+    path_median_time: float = 0.0
+    path_p95_time: float = 0.0
+    # Binary classification (TRIP as positive)
+    precision: float = 0.0
+    recall: float = 0.0
+    f1: float = 0.0
+    # Per-category accuracy
+    per_category_accuracy: Dict[str, float] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 def load_sentences() -> List[EvalCase]:
     """Load evaluation cases from a committed eval dataset CSV."""
     with CSV_PATH.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        cases: List[EvalCase] = []
-        for row in reader:
-            cases.append(
-                EvalCase(
-                    case_id=row["case_id"],
-                    text=row["text"],
-                    intent_gt=row["intent_gt"],
-                    departure_gt=row.get("departure_gt") or None,
-                    arrival_gt=row.get("arrival_gt") or None,
-                )
+        return [
+            EvalCase(
+                case_id=row["case_id"],
+                text=row["text"],
+                intent_gt=row["intent_gt"],
+                departure_gt=row.get("departure_gt") or None,
+                arrival_gt=row.get("arrival_gt") or None,
             )
-        return cases
+            for row in reader
+        ]
 
 
-def validate_result(
-    *,
-    case: EvalCase,
-    departure: str | None,
-    arrival: str | None,
-    path: list[str] | None,
-    error: str | None,
-) -> bool:
-    """Validate the pipeline output against the eval dataset ground truth."""
-    if case.intent_gt == "TRIP":
-        if error is not None:
-            return False
-        if not path:
-            return False
-        return departure == case.departure_gt and arrival == case.arrival_gt
-
-    if case.intent_gt in ("NOT_TRIP", "NOT_FRENCH"):
-        return error is not None or not path
-
-    return False
+def _safe_div(n: float, d: float) -> float:
+    return n / d if d > 0 else 0.0
 
 
+def _compute_p95(values: List[float]) -> float:
+    if not values:
+        return 0.0
+    s = sorted(values)
+    return s[min(int(len(s) * 0.95), len(s) - 1)]
+
+
+# ---------------------------------------------------------------------------
+# Pipeline execution
+# ---------------------------------------------------------------------------
 def run_pipeline(
-    sentence: str,
-    nlp_name: str = "rule_based",
-    path_name: str = "dijkstra",
+    case: EvalCase,
+    intent_name: str,
+    nlp_name: str,
+    path_name: str,
+    graph: Graph,
 ) -> Tuple[
     str,
+    float,
     float,
     float,
     str | None,
@@ -181,243 +237,430 @@ def run_pipeline(
     list[str] | None,
     float | None,
     str | None,
+    bool,
+    bool,
 ]:
-    """Run the core pipeline and return results with timing information.
+    """Run intent → NLP → path pipeline with per-component timing.
 
     Returns:
-        Tuple of (message, nlp_time, path_time, departure, arrival, path, distance, error)
+        (predicted_intent, intent_time, nlp_time, path_time,
+         departure, arrival, path, distance, error,
+         departure_correct, arrival_correct)
     """
-    nlp = NLP_STRATEGIES.get(nlp_name)
-    if nlp is None:
+    intent_fn = INTENT_STRATEGIES[intent_name]
+    nlp_fn = NLP_STRATEGIES[nlp_name]
+    path_finder = PATH_FINDER_STRATEGIES[path_name]
+
+    # 1. Intent classification
+    t0 = time.perf_counter()
+    intent = intent_fn(case.text)
+    intent_time = time.perf_counter() - t0
+
+    if intent.name != "TRIP":
         return (
-            f"Unknown NLP strategy: {nlp_name!r}",
-            0,
-            0,
+            intent.name,
+            intent_time,
+            0.0,
+            0.0,
             None,
             None,
             None,
             None,
-            f"Unknown NLP strategy: {nlp_name!r}",
+            "intent_filtered",
+            False,
+            False,
         )
 
-    path_finder = PATH_FINDER_STRATEGIES.get(path_name)
-    if path_finder is None:
-        return (
-            f"Unknown path-finding strategy: {path_name!r}",
-            0,
-            0,
-            None,
-            None,
-            None,
-            None,
-            f"Unknown path-finding strategy: {path_name!r}",
+    # 2. NLP extraction
+    t0 = time.perf_counter()
+    result = nlp_fn(case.text)
+    nlp_time = time.perf_counter() - t0
+
+    if result.error or result.departure is None or result.arrival is None:
+        error = result.error or "Incomplete extraction"
+        dep_correct = (
+            result.departure is not None and result.departure == case.departure_gt
         )
-
-    # NLP execution with timing
-    start_nlp = time.perf_counter()
-    result = nlp(sentence)
-    nlp_time = time.perf_counter() - start_nlp
-
-    if result.error:
+        arr_correct = result.arrival is not None and result.arrival == case.arrival_gt
         return (
-            f"Extraction error: {result.error}",
+            intent.name,
+            intent_time,
             nlp_time,
-            0,
+            0.0,
+            result.departure,
+            result.arrival,
             None,
             None,
-            None,
-            None,
-            result.error,
+            error,
+            dep_correct,
+            arr_correct,
         )
 
-    if result.departure is None or result.arrival is None:
-        error = "Departure or arrival not set"
-        return f"Extraction error: {error}", nlp_time, 0, None, None, None, None, error
+    dep_correct = result.departure == case.departure_gt
+    arr_correct = result.arrival == case.arrival_gt
 
-    departure = result.departure
-    arrival = result.arrival
+    # 3. Path finding
+    t0 = time.perf_counter()
+    path, distance = path_finder(graph, result.departure, result.arrival)
+    path_time = time.perf_counter() - t0
 
+    return (
+        intent.name,
+        intent_time,
+        nlp_time,
+        path_time,
+        result.departure,
+        result.arrival,
+        path,
+        distance,
+        None,
+        dep_correct,
+        arr_correct,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
+def evaluate_strategies() -> Tuple[List[TestResult], List[StrategyMetrics]]:
+    """Evaluate all intent × NLP × path strategy combinations."""
+    sentences = load_sentences()
     graph = load_graph(str(STATIONS_CSV), str(EDGES_CSV))
 
-    # Path finding execution with timing
-    start_path = time.perf_counter()
-    path, distance = path_finder(graph, departure, arrival)
-    path_time = time.perf_counter() - start_path
-
-    if not path:
-        message = f"No path found between {departure} and {arrival}."
-    else:
-        path_str = " -> ".join(path)
-        message = f"{departure},{arrival}"
-
-    return message, nlp_time, path_time, departure, arrival, path, distance, None
-
-
-def _safe_div(n: float, d: float) -> float:
-    """Safe division returning 0 when denominator is 0."""
-    return n / d if d > 0 else 0.0
-
-
-def _compute_p95(values: List[float]) -> float:
-    """Compute the 95th percentile of a list of values."""
-    if not values:
-        return 0.0
-    s = sorted(values)
-    return s[min(int(len(s) * 0.95), len(s) - 1)]
-
-
-def evaluate_strategies() -> Tuple[List[TestResult], List[StrategyMetrics]]:
-    """Evaluate all strategy combinations against all test sentences."""
     test_results: List[TestResult] = []
-    # Track detailed data per strategy combination
-    strategy_data: Dict[Tuple[str, str], Dict] = {}
+    strategy_data: Dict[Tuple[str, str, str], Dict] = {}
 
-    sentences = load_sentences()
+    for intent_name in INTENT_STRATEGIES:
+        for nlp_name in NLP_STRATEGIES:
+            for path_name in PATH_FINDER_STRATEGIES:
+                key = (intent_name, nlp_name, path_name)
+                strategy_data[key] = {
+                    "total_times": [],
+                    "intent_times": [],
+                    "nlp_times": [],
+                    "path_times": [],
+                    "passed": 0,
+                    "passed_by_cat": defaultdict(int),
+                    "total_by_cat": defaultdict(int),
+                    "results": [],
+                }
 
-    # Test each strategy combination
-    for nlp_name in NLP_STRATEGIES.keys():
-        for path_name in PATH_FINDER_STRATEGIES.keys():
-            key = (nlp_name, path_name)
-            strategy_data[key] = {
-                "total_times": [],
-                "nlp_times": [],
-                "path_times": [],
-                "passed": 0,
-                "passed_by_cat": defaultdict(int),
-                "total_by_cat": defaultdict(int),
-                "results": [],
-            }
+                label = f"{intent_name}+{nlp_name}+{path_name}"
+                for case in tqdm(sentences, desc=f"Pipeline [{label}]"):
+                    (
+                        predicted_intent,
+                        intent_time,
+                        nlp_time,
+                        path_time,
+                        departure,
+                        arrival,
+                        path,
+                        distance,
+                        error,
+                        dep_correct,
+                        arr_correct,
+                    ) = run_pipeline(case, intent_name, nlp_name, path_name, graph)
 
-            for case in tqdm(sentences, desc=f"Pipeline [{nlp_name}+{path_name}]"):
-                (
-                    message,
-                    nlp_time,
-                    path_time,
-                    departure,
-                    arrival,
-                    path,
-                    distance,
-                    error,
-                ) = run_pipeline(case.text, nlp_name, path_name)
+                    total_time = intent_time + nlp_time + path_time
 
-                total_time = nlp_time + path_time
-                passed = validate_result(
-                    case=case,
-                    departure=departure,
-                    arrival=arrival,
-                    path=path,
-                    error=error,
-                )
+                    if case.intent_gt == "TRIP":
+                        passed = (
+                            error is None and bool(path) and dep_correct and arr_correct
+                        )
+                    else:
+                        passed = error is not None or not path
 
-                test_result = TestResult(
-                    sentence_id=case.case_id,
-                    sentence=case.text,
-                    nlp_strategy=nlp_name,
-                    path_strategy=path_name,
-                    expected_output=case.intent_gt,
-                    departure_gt=case.departure_gt,
-                    arrival_gt=case.arrival_gt,
-                    nlp_execution_time=nlp_time,
-                    path_execution_time=path_time,
-                    total_execution_time=total_time,
-                    departure=departure,
-                    arrival=arrival,
-                    path=path,
-                    distance=distance,
-                    error=error,
-                    passed=passed,
-                )
-                test_results.append(test_result)
+                    test_result = TestResult(
+                        sentence_id=case.case_id,
+                        sentence=case.text,
+                        intent_strategy=intent_name,
+                        nlp_strategy=nlp_name,
+                        path_strategy=path_name,
+                        expected_intent=case.intent_gt,
+                        predicted_intent=predicted_intent,
+                        departure_gt=case.departure_gt,
+                        arrival_gt=case.arrival_gt,
+                        intent_execution_time=intent_time,
+                        nlp_execution_time=nlp_time,
+                        path_execution_time=path_time,
+                        total_execution_time=total_time,
+                        departure=departure,
+                        arrival=arrival,
+                        path=path,
+                        distance=distance,
+                        error=error,
+                        departure_correct=dep_correct,
+                        arrival_correct=arr_correct,
+                        passed=passed,
+                    )
+                    test_results.append(test_result)
 
-                d = strategy_data[key]
-                d["total_times"].append(total_time)
-                d["nlp_times"].append(nlp_time)
-                d["path_times"].append(path_time)
-                d["total_by_cat"][case.intent_gt] += 1
-                d["results"].append(test_result)
-                if passed:
-                    d["passed"] += 1
-                    d["passed_by_cat"][case.intent_gt] += 1
+                    d = strategy_data[key]
+                    d["total_times"].append(total_time)
+                    d["intent_times"].append(intent_time)
+                    d["nlp_times"].append(nlp_time)
+                    d["path_times"].append(path_time)
+                    d["total_by_cat"][case.intent_gt] += 1
+                    d["results"].append(test_result)
+                    if passed:
+                        d["passed"] += 1
+                        d["passed_by_cat"][case.intent_gt] += 1
 
-    # Compute aggregated metrics
+    # Aggregate metrics
     strategy_metrics: List[StrategyMetrics] = []
-    for (nlp_name, path_name), d in strategy_data.items():
-        total = len(sentences)
-        _passed = d["passed"]
+    for (intent_name, nlp_name, path_name), d in strategy_data.items():
+        total = len(d["results"])
+        results = d["results"]
         times = d["total_times"]
+        intent_times = d["intent_times"]
         nlp_times = d["nlp_times"]
         path_times = d["path_times"]
 
         # Per-category accuracy
-        per_cat: Dict[str, float] = {}
-        for cat in sorted(d["total_by_cat"].keys()):
-            per_cat[cat] = _safe_div(d["passed_by_cat"][cat], d["total_by_cat"][cat])
+        per_cat: Dict[str, float] = {
+            cat: _safe_div(d["passed_by_cat"][cat], d["total_by_cat"][cat])
+            for cat in sorted(d["total_by_cat"].keys())
+        }
 
-        # Binary P/R/F1: TRIP as positive class
-        # TP = TRIP and exact-match route produced
-        # FP = NOT_TRIP/NOT_FRENCH but a route was produced anyway
-        # FN = TRIP but no exact-match route
-        def _exact_trip_success(r: TestResult) -> bool:
-            return (
-                r.expected_output == "TRIP"
-                and r.error is None
-                and bool(r.path)
-                and r.departure == r.departure_gt
-                and r.arrival == r.arrival_gt
-            )
+        # Intent accuracy
+        intent_correct = sum(
+            1 for r in results if r.predicted_intent == r.expected_intent
+        )
 
-        tp = sum(1 for r in d["results"] if _exact_trip_success(r))
+        # NLP extraction accuracy (TRIP cases)
+        trip_results = [r for r in results if r.expected_intent == "TRIP"]
+        dep_correct_ct = sum(r.departure_correct for r in trip_results)
+        arr_correct_ct = sum(r.arrival_correct for r in trip_results)
+        both_correct_ct = sum(
+            r.departure_correct and r.arrival_correct for r in trip_results
+        )
+
+        # Path finding metrics (cases where extraction succeeded, path was attempted)
+        path_attempted = [r for r in results if r.error is None]
+        paths_found = [r for r in path_attempted if r.path]
+        path_lengths = [len(r.path) for r in paths_found]
+        distances = [r.distance for r in paths_found if r.distance is not None]
+        # Only include non-zero path times for timing (path was actually attempted)
+        path_times_nonzero = [t for t in path_times if t > 0]
+
+        # Binary P/R/F1
+        tp = sum(1 for r in results if r.expected_intent == "TRIP" and r.passed)
         fp = sum(
             1
-            for r in d["results"]
-            if r.expected_output != "TRIP" and r.error is None and bool(r.path)
+            for r in results
+            if r.expected_intent != "TRIP" and r.error is None and bool(r.path)
         )
-        fn = sum(
-            1
-            for r in d["results"]
-            if r.expected_output == "TRIP" and not _exact_trip_success(r)
-        )
+        fn = sum(1 for r in results if r.expected_intent == "TRIP" and not r.passed)
         prec = _safe_div(tp, tp + fp)
         rec = _safe_div(tp, tp + fn)
         f1 = _safe_div(2 * prec * rec, prec + rec)
 
-        metrics = StrategyMetrics(
-            nlp_strategy=nlp_name,
-            path_strategy=path_name,
-            total_tests=total,
-            passed_tests=_passed,
-            failed_tests=total - _passed,
-            accuracy=_safe_div(_passed, total),
-            avg_execution_time=statistics.mean(times) if times else 0,
-            min_execution_time=min(times) if times else 0,
-            max_execution_time=max(times) if times else 0,
-            median_execution_time=statistics.median(times) if times else 0,
-            p95_execution_time=_compute_p95(times),
-            std_execution_time=(statistics.stdev(times) if len(times) > 1 else 0),
-            nlp_avg_time=statistics.mean(nlp_times) if nlp_times else 0,
-            nlp_median_time=(statistics.median(nlp_times) if nlp_times else 0),
-            nlp_p95_time=_compute_p95(nlp_times),
-            path_avg_time=statistics.mean(path_times) if path_times else 0,
-            path_median_time=(statistics.median(path_times) if path_times else 0),
-            path_p95_time=_compute_p95(path_times),
-            precision=prec,
-            recall=rec,
-            f1=f1,
-            per_category_accuracy=per_cat,
+        strategy_metrics.append(
+            StrategyMetrics(
+                intent_strategy=intent_name,
+                nlp_strategy=nlp_name,
+                path_strategy=path_name,
+                total_tests=total,
+                passed_tests=d["passed"],
+                failed_tests=total - d["passed"],
+                accuracy=_safe_div(d["passed"], total),
+                avg_execution_time=statistics.mean(times) if times else 0,
+                min_execution_time=min(times) if times else 0,
+                max_execution_time=max(times) if times else 0,
+                median_execution_time=statistics.median(times) if times else 0,
+                p95_execution_time=_compute_p95(times),
+                std_execution_time=(statistics.stdev(times) if len(times) > 1 else 0),
+                intent_accuracy=_safe_div(intent_correct, total),
+                intent_avg_time=statistics.mean(intent_times) if intent_times else 0,
+                intent_p95_time=_compute_p95(intent_times),
+                trip_total=len(trip_results),
+                departure_correct=dep_correct_ct,
+                arrival_correct=arr_correct_ct,
+                both_correct=both_correct_ct,
+                departure_accuracy=_safe_div(dep_correct_ct, len(trip_results)),
+                arrival_accuracy=_safe_div(arr_correct_ct, len(trip_results)),
+                both_accuracy=_safe_div(both_correct_ct, len(trip_results)),
+                nlp_avg_time=statistics.mean(nlp_times) if nlp_times else 0,
+                nlp_median_time=(statistics.median(nlp_times) if nlp_times else 0),
+                nlp_p95_time=_compute_p95(nlp_times),
+                path_total=len(path_attempted),
+                paths_found=len(paths_found),
+                paths_found_rate=_safe_div(len(paths_found), len(path_attempted)),
+                avg_path_length=(
+                    statistics.mean(path_lengths) if path_lengths else 0.0
+                ),
+                avg_distance=(statistics.mean(distances) if distances else 0.0),
+                path_avg_time=(
+                    statistics.mean(path_times_nonzero) if path_times_nonzero else 0
+                ),
+                path_median_time=(
+                    statistics.median(path_times_nonzero) if path_times_nonzero else 0
+                ),
+                path_p95_time=_compute_p95(path_times_nonzero),
+                precision=prec,
+                recall=rec,
+                f1=f1,
+                per_category_accuracy=per_cat,
+            )
         )
-        strategy_metrics.append(metrics)
 
     return test_results, strategy_metrics
 
 
+# ---------------------------------------------------------------------------
+# CSV failure export
+# ---------------------------------------------------------------------------
+def save_failures_csv(results: List[TestResult], results_dir: Path) -> None:
+    """Write one CSV per strategy combination containing only the failed cases."""
+    combos = sorted(
+        {(r.intent_strategy, r.nlp_strategy, r.path_strategy) for r in results}
+    )
+    for intent_name, nlp_name, path_name in combos:
+        failures = [
+            r
+            for r in results
+            if r.intent_strategy == intent_name
+            and r.nlp_strategy == nlp_name
+            and r.path_strategy == path_name
+            and not r.passed
+        ]
+        if not failures:
+            continue
+        label = f"{intent_name}+{nlp_name}+{path_name}"
+        csv_path = results_dir / f"failures_{label}.csv"
+        fieldnames = [
+            "sentence_id",
+            "sentence",
+            "expected_intent",
+            "predicted_intent",
+            "departure_gt",
+            "arrival_gt",
+            "departure",
+            "arrival",
+            "departure_correct",
+            "arrival_correct",
+            "error",
+            "path",
+            "intent_execution_time",
+            "nlp_execution_time",
+            "path_execution_time",
+            "total_execution_time",
+        ]
+        with csv_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            writer.writeheader()
+            for r in failures:
+                row = asdict(r)
+                row["path"] = " -> ".join(r.path) if r.path else ""
+                writer.writerow(row)
+        print(f"  Failures CSV: {csv_path} ({len(failures)} cases)")
+
+
+# ---------------------------------------------------------------------------
+# Chart helpers
+# ---------------------------------------------------------------------------
+_CHART_PALETTE = [
+    "#1f6feb",
+    "#2da44e",
+    "#e36209",
+    "#8957e5",
+    "#cf222e",
+    "#0969da",
+    "#bf8700",
+    "#1a7f37",
+]
+
+
+def _bar_chart_drawing(
+    series_data: List[List[float]],
+    series_names: List[str],
+    x_labels: List[str],
+    title: str,
+    y_max: float = 100.0,
+    y_label: str = "%",
+    width: float = 460,
+    height: float = 200,
+):
+    """Return a ReportLab Drawing with a grouped vertical bar chart."""
+    from reportlab.graphics.charts.barcharts import VerticalBarChart
+    from reportlab.graphics.charts.legends import Legend
+    from reportlab.graphics.shapes import Drawing, String
+    from reportlab.lib import colors as rl_colors
+
+    legend_height = 14 * len(series_names)
+    total_height = height + legend_height + 30
+
+    d = Drawing(width, total_height)
+
+    # Title
+    d.add(
+        String(
+            width / 2,
+            total_height - 14,
+            title,
+            textAnchor="middle",
+            fontSize=11,
+            fontName="Helvetica-Bold",
+        )
+    )
+
+    chart = VerticalBarChart()
+    chart.x = 55
+    chart.y = legend_height + 10
+    chart.width = width - 70
+    chart.height = height - 20
+    chart.data = series_data
+    chart.categoryAxis.categoryNames = x_labels
+    if len(x_labels) > 3:
+        chart.categoryAxis.labels.angle = 25
+        chart.categoryAxis.labels.boxAnchor = "ne"
+        chart.categoryAxis.labels.fontSize = 7
+    else:
+        chart.categoryAxis.labels.fontSize = 8
+    chart.valueAxis.valueMin = 0
+    chart.valueAxis.valueMax = y_max
+    chart.valueAxis.valueStep = y_max / 5
+    chart.valueAxis.labels.fontSize = 8
+    chart.groupSpacing = 8
+    chart.barSpacing = 1
+
+    for i, hex_color in enumerate(_CHART_PALETTE[: len(series_names)]):
+        chart.bars[i].fillColor = rl_colors.HexColor(hex_color)
+
+    d.add(chart)
+
+    # Legend
+    legend = Legend()
+    legend.x = 55
+    legend.y = legend_height - 5
+    legend.dx = 10
+    legend.dy = 8
+    legend.deltax = 120
+    legend.deltay = 13
+    legend.dxTextSpace = 5
+    legend.fontSize = 8
+    legend.colorNamePairs = [
+        (rl_colors.HexColor(_CHART_PALETTE[i]), series_names[i])
+        for i in range(len(series_names))
+    ]
+    legend.columnMaximum = (len(series_names) + 1) // 2
+    d.add(legend)
+
+    return d
+
+
+# ---------------------------------------------------------------------------
+# PDF report generation
+# ---------------------------------------------------------------------------
 def generate_pdf_report(
     results: List[TestResult], metrics: List[StrategyMetrics], pdf_path: Path
 ) -> None:
-    """Generate a PDF report using reportlab."""
+    """Generate a PDF report with per-component metrics and comparison charts."""
     try:
+        from reportlab.graphics.renderPDF import draw as rl_draw
         from reportlab.lib import colors
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT
-        from reportlab.lib.pagesizes import A4, letter
+        from reportlab.lib.enums import TA_CENTER
+        from reportlab.lib.pagesizes import letter
         from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import inch
         from reportlab.platypus import (
@@ -428,6 +671,18 @@ def generate_pdf_report(
             Table,
             TableStyle,
         )
+        from reportlab.platypus.flowables import Flowable
+
+        class _ChartFlowable(Flowable):
+            def __init__(self, drawing):
+                super().__init__()
+                self._drawing = drawing
+                self.width = drawing.width
+                self.height = drawing.height
+
+            def draw(self):
+                rl_draw(self._drawing, self.canv, 0, 0)
+
     except ImportError:
         raise ImportError(
             "reportlab is required to generate PDF reports. "
@@ -443,7 +698,6 @@ def generate_pdf_report(
     story = []
     styles = getSampleStyleSheet()
 
-    # Custom styles
     title_style = ParagraphStyle(
         "CustomTitle",
         parent=styles["Heading1"],
@@ -452,7 +706,6 @@ def generate_pdf_report(
         spaceAfter=30,
         alignment=TA_CENTER,
     )
-
     heading_style = ParagraphStyle(
         "CustomHeading",
         parent=styles["Heading2"],
@@ -461,364 +714,270 @@ def generate_pdf_report(
         spaceAfter=12,
         spaceBefore=12,
     )
-
-    table_style = TableStyle(
+    sub_style = ParagraphStyle(
+        "SubHeading",
+        parent=styles["Heading3"],
+        fontSize=11,
+        textColor=colors.HexColor("#555555"),
+    )
+    kv_ts = TableStyle(
         [
             ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f0f0")),
-            ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
-            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
             ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 10),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
-            ("GRID", (0, 0), (-1, -1), 1, colors.grey),
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ]
+    )
+    hdr_ts = TableStyle(
+        [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f6feb")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ]
     )
 
-    # Title
+    def kv_table(data: list, col1: float = 2.5, col2: float = 2.5) -> Table:
+        t = Table(data, colWidths=[col1 * inch, col2 * inch])
+        t.setStyle(kv_ts)
+        return t
+
+    # ===== TITLE & SUMMARY =====
     story.append(Paragraph("Strategy Evaluation Results", title_style))
     story.append(Spacer(1, 0.3 * inch))
 
-    # Summary
     story.append(Paragraph("Summary", heading_style))
-    summary_data = [
-        ["Total Strategy Combinations", str(len(metrics))],
-        ["Total Test Cases", str(len(results) // len(metrics) if metrics else 0)],
-        ["Timestamp", time.strftime("%Y-%m-%d %H:%M:%S")],
-    ]
-    summary_table = Table(summary_data, colWidths=[3 * inch, 2 * inch])
-    summary_table.setStyle(table_style)
-    story.append(summary_table)
+    n_sentences = len(results) // len(metrics) if metrics else 0
+    story.append(
+        kv_table(
+            [
+                ["Strategy Combinations", str(len(metrics))],
+                ["Test Cases", str(n_sentences)],
+                ["Dataset", _DATASET_NAME],
+                ["Timestamp", time.strftime("%Y-%m-%d %H:%M:%S")],
+            ],
+            col1=3,
+            col2=2,
+        )
+    )
     story.append(Spacer(1, 0.3 * inch))
 
-    # Strategy Performance
+    # ===== PER-COMBINATION DETAIL =====
     story.append(Paragraph("Strategy Performance", heading_style))
+
     for metric in metrics:
-        strategy_name = f"{metric.nlp_strategy.upper()} NLP + {metric.path_strategy.upper()} Path Finder"
-        story.append(Paragraph(strategy_name, styles["Heading3"]))
-
-        sub_style = ParagraphStyle(
-            "SubHeading3",
-            parent=styles["Heading3"],
-            fontSize=11,
-            textColor=colors.HexColor("#555555"),
+        label = (
+            f"{metric.intent_strategy.upper()} \u2192 "
+            f"{metric.nlp_strategy.upper()} \u2192 "
+            f"{metric.path_strategy.upper()}"
         )
+        story.append(Paragraph(label, styles["Heading3"]))
 
-        perf_data = [
-            [
-                "Accuracy",
-                f"{metric.accuracy * 100:.2f}% ({metric.passed_tests}/{metric.total_tests})",
-            ],
-            ["Precision (CORRECT)", f"{metric.precision * 100:.2f}%"],
-            ["Recall (CORRECT)", f"{metric.recall * 100:.2f}%"],
-            ["F1 Score (CORRECT)", f"{metric.f1 * 100:.2f}%"],
-        ]
-
-        story.append(Paragraph("Classification Metrics", sub_style))
-
-        perf_table = Table(perf_data, colWidths=[2.5 * inch, 2.5 * inch])
-        perf_table.setStyle(table_style)
-        story.append(perf_table)
-        story.append(Spacer(1, 0.15 * inch))
+        # Overall classification
+        story.append(Paragraph("Overall Pipeline", sub_style))
+        story.append(
+            kv_table(
+                [
+                    [
+                        "Accuracy",
+                        f"{metric.accuracy * 100:.2f}% ({metric.passed_tests}/{metric.total_tests})",
+                    ],
+                    ["Precision (TRIP)", f"{metric.precision * 100:.2f}%"],
+                    ["Recall (TRIP)", f"{metric.recall * 100:.2f}%"],
+                    ["F1 Score (TRIP)", f"{metric.f1 * 100:.2f}%"],
+                ]
+            )
+        )
+        story.append(Spacer(1, 0.12 * inch))
 
         # Per-category accuracy
         if metric.per_category_accuracy:
             story.append(Paragraph("Per-Category Accuracy", sub_style))
-            cat_header_style = TableStyle(
-                [
-                    (
-                        "BACKGROUND",
-                        (0, 0),
-                        (-1, 0),
-                        colors.HexColor("#1f6feb"),
-                    ),
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                    ("FONTSIZE", (0, 0), (-1, -1), 10),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-                    ("GRID", (0, 0), (-1, -1), 1, colors.grey),
-                ]
-            )
             cat_data = [["Category", "Accuracy"]]
             for cat, acc in sorted(metric.per_category_accuracy.items()):
                 cat_data.append([cat, f"{acc * 100:.2f}%"])
-            cat_table = Table(cat_data, colWidths=[2.5 * inch, 2.5 * inch])
-            cat_table.setStyle(cat_header_style)
-            story.append(cat_table)
-            story.append(Spacer(1, 0.15 * inch))
+            t = Table(cat_data, colWidths=[2.5 * inch, 2.5 * inch])
+            t.setStyle(hdr_ts)
+            story.append(t)
+            story.append(Spacer(1, 0.12 * inch))
 
-        # Timing
-        story.append(Paragraph("Pipeline Timing", sub_style))
-        timing_data = [
-            [
-                "Avg Execution Time",
-                f"{metric.avg_execution_time * 1000:.2f} ms",
-            ],
-            [
-                "Median Execution Time",
-                f"{metric.median_execution_time * 1000:.2f} ms",
-            ],
-            [
-                "P95 Execution Time",
-                f"{metric.p95_execution_time * 1000:.2f} ms",
-            ],
-            [
-                "Min Execution Time",
-                f"{metric.min_execution_time * 1000:.2f} ms",
-            ],
-            [
-                "Max Execution Time",
-                f"{metric.max_execution_time * 1000:.2f} ms",
-            ],
-            [
-                "Std Dev",
-                f"{metric.std_execution_time * 1000:.2f} ms",
-            ],
-        ]
-        timing_table = Table(timing_data, colWidths=[2.5 * inch, 2.5 * inch])
-        timing_table.setStyle(table_style)
-        story.append(timing_table)
-        story.append(Spacer(1, 0.2 * inch))
+        # Intent classification
+        story.append(Paragraph("Intent Classification", sub_style))
+        story.append(
+            kv_table(
+                [
+                    ["Intent Accuracy", f"{metric.intent_accuracy * 100:.2f}%"],
+                    ["Avg Time", f"{metric.intent_avg_time * 1000:.2f} ms"],
+                    ["P95 Time", f"{metric.intent_p95_time * 1000:.2f} ms"],
+                ]
+            )
+        )
+        story.append(Spacer(1, 0.12 * inch))
 
-        # Filter results for this strategy combination
-        strategy_results = [
-            r
-            for r in results
-            if r.nlp_strategy == metric.nlp_strategy
-            and r.path_strategy == metric.path_strategy
-        ]
-
-        # NLP Results for this strategy
+        # NLP extraction
         story.append(
             Paragraph(
-                "NLP Results",
-                ParagraphStyle(
-                    "SubHeading3",
-                    parent=styles["Heading3"],
-                    fontSize=11,
-                    textColor=colors.HexColor("#555555"),
-                ),
+                f"Station Extraction (TRIP only, n={metric.trip_total})", sub_style
             )
         )
-
-        nlp_strategy_results = [r for r in strategy_results if not r.error]
-        nlp_strategy_errors = [r for r in strategy_results if r.error]
-
-        nlp_strategy_data = [
-            ["Inputs Processed", str(len(strategy_results))],
-            ["Successfully Extracted", str(len(nlp_strategy_results))],
-            ["Extraction Errors", str(len(nlp_strategy_errors))],
-            [
-                "Avg Extraction Time",
-                f"{metric.nlp_avg_time * 1000:.2f} ms",
-            ],
-            [
-                "Median Extraction Time",
-                f"{metric.nlp_median_time * 1000:.2f} ms",
-            ],
-            [
-                "P95 Extraction Time",
-                f"{metric.nlp_p95_time * 1000:.2f} ms",
-            ],
-        ]
-        nlp_strategy_table = Table(
-            nlp_strategy_data, colWidths=[2.5 * inch, 2.5 * inch]
-        )
-        nlp_strategy_table.setStyle(table_style)
-        story.append(nlp_strategy_table)
-        story.append(Spacer(1, 0.15 * inch))
-
-        # Path Finder Results for this strategy
         story.append(
-            Paragraph(
-                "Path Finder Results",
-                ParagraphStyle(
-                    "SubHeading3",
-                    parent=styles["Heading3"],
-                    fontSize=11,
-                    textColor=colors.HexColor("#555555"),
-                ),
+            kv_table(
+                [
+                    [
+                        "Departure correct",
+                        f"{metric.departure_accuracy * 100:.2f}% ({metric.departure_correct}/{metric.trip_total})",
+                    ],
+                    [
+                        "Arrival correct",
+                        f"{metric.arrival_accuracy * 100:.2f}% ({metric.arrival_correct}/{metric.trip_total})",
+                    ],
+                    [
+                        "Both correct",
+                        f"{metric.both_accuracy * 100:.2f}% ({metric.both_correct}/{metric.trip_total})",
+                    ],
+                    ["Avg Time", f"{metric.nlp_avg_time * 1000:.2f} ms"],
+                    ["P95 Time", f"{metric.nlp_p95_time * 1000:.2f} ms"],
+                ]
             )
         )
+        story.append(Spacer(1, 0.12 * inch))
 
-        path_strategy_results = [r for r in strategy_results if not r.error]
-
-        if path_strategy_results:
-            avg_path_len = sum(
-                len(r.path) if r.path else 0 for r in path_strategy_results
-            ) / len(path_strategy_results)
-            path_strategy_data = [
-                ["Paths Computed", str(len(path_strategy_results))],
+        # Path finding
+        story.append(
+            Paragraph(f"Path Finding (attempted: {metric.path_total})", sub_style)
+        )
+        story.append(
+            kv_table(
                 [
-                    "Avg Computation Time",
-                    f"{metric.path_avg_time * 1000:.2f} ms",
-                ],
-                [
-                    "Median Computation Time",
-                    f"{metric.path_median_time * 1000:.2f} ms",
-                ],
-                [
-                    "P95 Computation Time",
-                    f"{metric.path_p95_time * 1000:.2f} ms",
-                ],
-                [
-                    "Avg Path Length",
-                    f"{avg_path_len:.2f} stations",
-                ],
-            ]
-            path_strategy_table = Table(
-                path_strategy_data, colWidths=[2.5 * inch, 2.5 * inch]
+                    [
+                        "Paths found",
+                        f"{metric.paths_found_rate * 100:.2f}% ({metric.paths_found}/{metric.path_total})",
+                    ],
+                    ["Avg path length", f"{metric.avg_path_length:.1f} stations"],
+                    ["Avg distance", f"{metric.avg_distance:.1f} km"],
+                    ["Avg Time", f"{metric.path_avg_time * 1000:.2f} ms"],
+                    ["P95 Time", f"{metric.path_p95_time * 1000:.2f} ms"],
+                ]
             )
-            path_strategy_table.setStyle(table_style)
-            story.append(path_strategy_table)
-
-        story.append(Spacer(1, 0.25 * inch))
-
-    story.append(PageBreak())
-
-    # Per-Strategy Results
-    story.append(Paragraph("Results Per Strategy", heading_style))
-
-    # NLP Results - GLOBAL
-    story.append(Paragraph("NLP Results (Global)", heading_style))
-    story.append(
-        Paragraph(
-            "The NLP component extracts departure and arrival stations from user input.",
-            styles["Normal"],
         )
-    )
+        story.append(Spacer(1, 0.12 * inch))
 
-    story.append(Spacer(1, 0.1 * inch))
+        # Pipeline timing
+        story.append(Paragraph("Total Pipeline Timing", sub_style))
+        story.append(
+            kv_table(
+                [
+                    ["Avg", f"{metric.avg_execution_time * 1000:.2f} ms"],
+                    ["Median", f"{metric.median_execution_time * 1000:.2f} ms"],
+                    ["P95", f"{metric.p95_execution_time * 1000:.2f} ms"],
+                    ["Std Dev", f"{metric.std_execution_time * 1000:.2f} ms"],
+                ]
+            )
+        )
+        story.append(Spacer(1, 0.3 * inch))
 
-    nlp_results_global = [r for r in results if not r.error]
-    nlp_errors_global = [r for r in results if r.error]
+    # ===== COMPARISON CHARTS =====
+    if len(metrics) > 1:
+        story.append(PageBreak())
+        story.append(Paragraph("Strategy Comparison", heading_style))
 
-    if results:
-        nlp_times_global = [r.nlp_execution_time for r in results]
-        nlp_times_sorted = sorted(nlp_times_global)
-        nlp_p95_idx = min(int(len(nlp_times_sorted) * 0.95), len(nlp_times_sorted) - 1)
-        nlp_data_global = [
-            ["Total Inputs Processed", str(len(results))],
-            ["Successfully Extracted", str(len(nlp_results_global))],
-            ["Extraction Errors", str(len(nlp_errors_global))],
-            [
-                "Avg Extraction Time",
-                f"{statistics.mean(nlp_times_global) * 1000:.2f} ms",
-            ],
-            [
-                "Median Extraction Time",
-                f"{statistics.median(nlp_times_global) * 1000:.2f} ms",
-            ],
-            [
-                "P95 Extraction Time",
-                f"{nlp_times_sorted[nlp_p95_idx] * 1000:.2f} ms",
-            ],
+        # Short labels: "rb+rb+dijk" → "rb+rb"
+        def _short(m: StrategyMetrics) -> str:
+            abbr = {
+                "rule_based": "rb",
+                "spacy": "spacy",
+                "hf_ner": "hf",
+                "finetuned_ner": "ft_ner",
+                "finetuned_intent": "ft_int",
+                "dijkstra": "dijk",
+            }
+            i = abbr.get(m.intent_strategy, m.intent_strategy[:4])
+            n = abbr.get(m.nlp_strategy, m.nlp_strategy[:4])
+            return f"{i}+{n}"
+
+        x_labels = [_short(m) for m in metrics]
+
+        # Chart 1: Quality metrics (%)
+        quality_series = [
+            [m.accuracy * 100 for m in metrics],
+            [m.f1 * 100 for m in metrics],
+            [m.intent_accuracy * 100 for m in metrics],
+            [m.departure_accuracy * 100 for m in metrics],
+            [m.arrival_accuracy * 100 for m in metrics],
+            [m.paths_found_rate * 100 for m in metrics],
         ]
-        nlp_table_global = Table(nlp_data_global, colWidths=[3 * inch, 2 * inch])
-        nlp_table_global.setStyle(table_style)
-        story.append(nlp_table_global)
-        story.append(Spacer(1, 0.2 * inch))
-
-    # Path Finder Results - GLOBAL
-    story.append(Paragraph("Path Finder Results (Global)", heading_style))
-    story.append(
-        Paragraph(
-            "The path finder computes the shortest route between two stations.",
-            styles["Normal"],
-        )
-    )
-
-    story.append(Spacer(1, 0.1 * inch))
-
-    path_results_global = [r for r in results if not r.error]
-    if path_results_global:
-        path_data_global = [
-            ["Total Paths Computed", str(len(path_results_global))],
-            [
-                "Avg Path Computation Time",
-                f"{sum(r.path_execution_time for r in path_results_global) / len(path_results_global) * 1000:.2f} ms",
-            ],
-            [
-                "Avg Path Length",
-                f"{sum(len(p) if p else 0 for p in [r.path for r in path_results_global]) / len(path_results_global):.2f} stations",
-            ],
+        quality_names = [
+            "Accuracy",
+            "F1",
+            "Intent acc.",
+            "Dep. acc.",
+            "Arr. acc.",
+            "Paths found",
         ]
-        path_table_global = Table(path_data_global, colWidths=[3 * inch, 2 * inch])
-        path_table_global.setStyle(table_style)
-        story.append(path_table_global)
-        story.append(Spacer(1, 0.2 * inch))
-
-    # Pipeline Results
-    story.append(Paragraph("Pipeline Results", heading_style))
-    story.append(
-        Paragraph(
-            "End-to-end pipeline performance combining NLP and path finding.",
-            styles["Normal"],
+        chart1 = _bar_chart_drawing(
+            quality_series,
+            quality_names,
+            x_labels,
+            "Quality Metrics (%)",
+            y_max=100,
+            y_label="%",
         )
-    )
+        story.append(_ChartFlowable(chart1))
+        story.append(Spacer(1, 0.3 * inch))
 
-    story.append(Spacer(1, 0.1 * inch))
+        # Chart 2: Component timing P95 (ms)
+        max_ms = max(m.p95_execution_time * 1000 for m in metrics) * 1.15 or 100
+        timing_series = [
+            [m.intent_p95_time * 1000 for m in metrics],
+            [m.nlp_p95_time * 1000 for m in metrics],
+            [m.path_p95_time * 1000 for m in metrics],
+            [m.p95_execution_time * 1000 for m in metrics],
+        ]
+        timing_names = ["Intent P95", "NLP P95", "Path P95", "Total P95"]
+        chart2 = _bar_chart_drawing(
+            timing_series,
+            timing_names,
+            x_labels,
+            "Timing P95 (ms)",
+            y_max=round(max_ms, -1) or 100,
+            y_label="ms",
+        )
+        story.append(_ChartFlowable(chart2))
 
-    all_results = results
-    all_times = [r.total_execution_time for r in all_results]
-    all_times_sorted = sorted(all_times)
-    all_p95_idx = min(int(len(all_times_sorted) * 0.95), len(all_times_sorted) - 1)
-
-    pipeline_data = [
-        ["Total Pipeline Executions", str(len(all_results))],
-        ["Avg Total Time", f"{statistics.mean(all_times) * 1000:.2f} ms"],
-        [
-            "Median Total Time",
-            f"{statistics.median(all_times) * 1000:.2f} ms",
-        ],
-        [
-            "P95 Total Time",
-            f"{all_times_sorted[all_p95_idx] * 1000:.2f} ms",
-        ],
-        [
-            "Min Total Time",
-            f"{min(all_times) * 1000:.2f} ms",
-        ],
-        [
-            "Max Total Time",
-            f"{max(all_times) * 1000:.2f} ms",
-        ],
-        [
-            "Std Dev",
-            (
-                f"{statistics.stdev(all_times) * 1000:.2f} ms"
-                if len(all_times) > 1
-                else "N/A"
-            ),
-        ],
-    ]
-    pipeline_table = Table(pipeline_data, colWidths=[3 * inch, 2 * inch])
-    pipeline_table.setStyle(table_style)
-    story.append(pipeline_table)
-
-    # Build PDF
     doc.build(story)
 
 
+# ---------------------------------------------------------------------------
+# Test entry point
+# ---------------------------------------------------------------------------
 @pytest.mark.slow
 def test_evaluate_all_strategies():
-    """Main test function that evaluates strategies and generates PDF report."""
-    # Ensure results directory exists
+    """Evaluate all strategy combinations and generate PDF + CSV failure reports."""
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Run evaluation
     test_results, metrics = evaluate_strategies()
 
-    # Generate PDF report
     pdf_path = RESULTS_DIR / "strategy_evaluation.pdf"
     generate_pdf_report(test_results, metrics, pdf_path)
+    print(f"\n  PDF report saved to: {pdf_path}")
 
-    print(f"✓ PDF report saved to: {pdf_path}")
+    save_failures_csv(test_results, RESULTS_DIR)
 
-    # Summary assertions
+    for m in metrics:
+        print(
+            f"  [{m.intent_strategy}+{m.nlp_strategy}+{m.path_strategy}]: "
+            f"acc={m.accuracy * 100:.1f}% F1={m.f1 * 100:.1f}% "
+            f"intent={m.intent_accuracy * 100:.1f}% "
+            f"dep={m.departure_accuracy * 100:.1f}% arr={m.arrival_accuracy * 100:.1f}% "
+            f"paths={m.paths_found_rate * 100:.1f}% "
+            f"avg_dist={m.avg_distance:.0f}km p95={m.p95_execution_time * 1000:.0f}ms"
+        )
+
     assert test_results, "No test results generated"
     assert metrics, "No strategy metrics generated"
-
-    # Verify that at least some tests passed
-    passed_count = sum(1 for r in test_results if r.passed)
-    assert passed_count > 0, f"No tests passed."
+    assert sum(1 for r in test_results if r.passed) > 0, "No tests passed"
