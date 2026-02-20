@@ -45,7 +45,12 @@ MODEL_CHOICES: List[str] = [
 ]
 
 CITY_STRATEGIES: List[CityStrategy] = ["legacy_spacy", "hf_ner", "finetuned_ner"]
-PIPELINE_STRATEGIES: List[str] = ["rule_based", "legacy_spacy", "hf_ner", "finetuned_ner"]
+PIPELINE_STRATEGIES: List[str] = [
+    "rule_based",
+    "legacy_spacy",
+    "hf_ner",
+    "finetuned_ner",
+]
 DATE_STRATEGIES: List[DateStrategy] = ["eds", "hf_ner"]
 INTENT_STRATEGIES: List[str] = ["rule_based", "hf_xnli", "finetuned_intent"]
 

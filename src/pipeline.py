@@ -42,7 +42,7 @@ def _extract_stations_finetuned(sentence: str) -> StationExtractionResult:
 
     if _FINETUNED_NER_ADAPTER is None:
         _FINETUNED_NER_ADAPTER = FineTunedNERAdapter()
-    return _FINETUNED_NER_ADAPTER.extract(sentence)
+    return _FINETUNED_NER_ADAPTER.extract(sentence)  # type: ignore[no-any-return]
 
 
 NLP_STRATEGIES: Dict[str, StationExtractor] = {

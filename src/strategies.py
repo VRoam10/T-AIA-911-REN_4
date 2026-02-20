@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, NotRequired, Optional, Tuple, TypedDict
 
-import requests
+import requests  # type: ignore[import-untyped]
 from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
 from geopy.extra.rate_limiter import RateLimiter
 from geopy.geocoders import Nominatim

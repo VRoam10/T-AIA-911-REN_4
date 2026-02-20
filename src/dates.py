@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import List
 
-import dateparser
+import dateparser  # type: ignore[import-untyped]
 
 
 def normalize_dates_fr(date_strings: List[str]) -> List[str]:
