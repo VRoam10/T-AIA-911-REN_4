@@ -164,7 +164,10 @@ Evaluation datasets are committed under `tests/data/`:
 Select which dataset the slow evaluation tests use:
 
 ```bash
-TOR_EVAL_DATASET=eval_500.csv pytest -m slow
+in Bash
+TOR_EVAL_DATASET=eval_500.csv pytest -m slow -s
+in CMD
+SET TOR_EVAL_DATASET=eval_500.csv && pytest -m slow -s
 ```
 
 ## Quick Setup

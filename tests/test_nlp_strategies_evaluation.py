@@ -196,7 +196,7 @@ def evaluate_pipeline() -> Tuple[List[PipelineTestResult], List[Dict]]:
             results: List[PipelineTestResult] = []
             times: List[float] = []
 
-            for case in tqdm(sentences, desc=f"Pipeline [{label}]"):
+            for case in tqdm(sentences, desc=f"NLP [{label}]"):
                 t0 = time.perf_counter()
                 intent = intent_classifier(case.text)
 
