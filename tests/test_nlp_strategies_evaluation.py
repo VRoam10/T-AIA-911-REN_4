@@ -1,9 +1,10 @@
-"""NLP strategies evaluation test.
+"""NLP pipeline evaluation test.
 
-Evaluates station extraction and intent classification strategies
-independently from path finding. Generates a PDF report with metrics:
-precision, recall, F1, per-category accuracy, confusion matrix,
-and timing percentiles (mean, median, P95, std).
+Evaluates each (intent_strategy, extraction_strategy) combination as a full
+pipeline: intent runs first and gates whether the extractor is called,
+mirroring the production flow in apps/app.py. Generates a PDF report with
+metrics: precision, recall, F1, confusion matrix, per-category accuracy,
+departure/arrival accuracy, and timing percentiles.
 """
 
 import csv
@@ -11,7 +12,7 @@ import os
 import statistics
 import time
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Tuple
 
@@ -31,6 +32,28 @@ except Exception:
 
 _DATASET_NAME = os.environ.get("TOR_EVAL_DATASET", "eval_10k.csv")
 CSV_PATH = Path(__file__).resolve().parent / "data" / _DATASET_NAME
+
+try:
+    from pathlib import Path as _Path
+
+    _finetuned_ner_model = str(
+        _Path(__file__).resolve().parent.parent
+        / "training"
+        / "models"
+        / "ner-camembert"
+    )
+    _finetuned_intent_model = str(
+        _Path(__file__).resolve().parent.parent
+        / "training"
+        / "models"
+        / "intent-camembert"
+    )
+    _FINETUNED_NER_AVAILABLE = _Path(_finetuned_ner_model).exists()
+    _FINETUNED_INTENT_AVAILABLE = _Path(_finetuned_intent_model).exists()
+except Exception:
+    _FINETUNED_NER_AVAILABLE = False
+    _FINETUNED_INTENT_AVAILABLE = False
+
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "test_results"
 
 # ---------------------------------------------------------------------------
@@ -46,10 +69,42 @@ EXTRACTION_STRATEGIES: Dict[str, StationExtractorFn] = {
 if _SPACY_AVAILABLE:
     EXTRACTION_STRATEGIES["spacy"] = extract_stations_spacy
 
+if _FINETUNED_NER_AVAILABLE:
+    from src.adapters.nlp.finetuned_ner_adapter import FineTunedNERAdapter
+
+    _finetuned_ner = FineTunedNERAdapter(model_path=_finetuned_ner_model)
+
+    def _extract_stations_finetuned(sentence: str) -> StationExtractionResult:
+        result = _finetuned_ner.extract(sentence)
+        from src.nlp.extract_stations import StationExtractionResult as LegacyResult
+
+        return LegacyResult(
+            departure=result.departure,
+            arrival=result.arrival,
+            error=result.error,
+        )
+
+    EXTRACTION_STRATEGIES["finetuned_ner"] = _extract_stations_finetuned
+
 INTENT_STRATEGIES: Dict[str, IntentClassifierFn] = {
     "rule_based": detect_intent,
 }
 
+if _FINETUNED_INTENT_AVAILABLE:
+    from src.adapters.nlp.finetuned_intent_adapter import FineTunedIntentClassifier
+
+    _finetuned_intent = FineTunedIntentClassifier(model_path=_finetuned_intent_model)
+
+    def _classify_intent_finetuned(sentence: str) -> Intent:
+        domain_intent = _finetuned_intent.classify(sentence)
+        return Intent[domain_intent.name]
+
+    INTENT_STRATEGIES["finetuned_intent"] = _classify_intent_finetuned
+
+
+# ---------------------------------------------------------------------------
+# Data structures
+# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class EvalCase:
     """Single evaluation case loaded from an eval_*.csv file."""
@@ -61,58 +116,44 @@ class EvalCase:
     arrival_gt: str | None
 
 
-# ---------------------------------------------------------------------------
-# Result data structures
-# ---------------------------------------------------------------------------
 @dataclass
-class ExtractionTestResult:
-    """Single station extraction test result."""
+class PipelineTestResult:
+    """Single (intent + extraction) pipeline test result."""
 
     sentence_id: str
     sentence: str
-    strategy: str
-    expected_output: str
-    execution_time: float
-    departure: str | None
+    strategy: str  # "intent_name+ext_name"
+    expected_intent: str  # ground truth (intent_gt from CSV)
+    predicted_intent: str  # what the intent classifier predicted
+    departure: str | None  # what the extractor predicted
     arrival: str | None
-    error: str | None
-    is_complete: bool
-    is_partial: bool
-    passed: bool
-
-
-@dataclass
-class IntentTestResult:
-    """Single intent classification test result."""
-
-    sentence_id: str
-    sentence: str
-    strategy: str
-    expected_intent: str
-    predicted_intent: str
+    departure_gt: str | None  # ground truth
+    arrival_gt: str | None
     execution_time: float
-    passed: bool
+    error: str | None  # None or "intent_filtered"
+    is_complete: bool  # extractor ran and got both stations
+    departure_correct: bool  # predicted departure == gt (TRIP cases only)
+    arrival_correct: bool  # predicted arrival == gt (TRIP cases only)
+    passed: bool  # entire pipeline correct end-to-end
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 def _load_sentences() -> List[EvalCase]:
-    """Load evaluation cases from a committed eval dataset CSV."""
+    """Load evaluation cases from the committed eval dataset CSV."""
     with CSV_PATH.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        cases: List[EvalCase] = []
-        for row in reader:
-            cases.append(
-                EvalCase(
-                    case_id=row["case_id"],
-                    text=row["text"],
-                    intent_gt=row["intent_gt"],
-                    departure_gt=row.get("departure_gt") or None,
-                    arrival_gt=row.get("arrival_gt") or None,
-                )
+        return [
+            EvalCase(
+                case_id=row["case_id"],
+                text=row["text"],
+                intent_gt=row["intent_gt"],
+                departure_gt=row.get("departure_gt") or None,
+                arrival_gt=row.get("arrival_gt") or None,
             )
-        return cases
+            for row in reader
+        ]
 
 
 def _timing_stats(times: List[float]) -> Dict[str, float]:
@@ -137,239 +178,221 @@ def _sdiv(n: float, d: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Extraction evaluation
+# Pipeline evaluation (intent × extraction matrix)
 # ---------------------------------------------------------------------------
-def _check_extraction(result: StationExtractionResult, case: EvalCase) -> bool:
-    """Check if extraction output matches the eval dataset ground truth."""
-    if case.intent_gt == "TRIP":
-        return (
-            result.error is None
-            and result.departure == case.departure_gt
-            and result.arrival == case.arrival_gt
-        )
+def evaluate_pipeline() -> Tuple[List[PipelineTestResult], List[Dict]]:
+    """Evaluate each (intent_strategy, extraction_strategy) pair as a pipeline.
 
-    if case.intent_gt in ("NOT_TRIP", "NOT_FRENCH"):
-        return (
-            result.error is not None
-            or result.departure is None
-            or result.arrival is None
-        )
-
-    return False
-
-
-def evaluate_extraction() -> Tuple[List[ExtractionTestResult], List[Dict]]:
-    """Evaluate all extraction strategies and compute metrics."""
+    For every sentence: intent runs first. If intent != TRIP the extractor is
+    skipped (matches apps/app.py flow). Results from all pairs are collected.
+    """
     sentences = _load_sentences()
-    all_results: List[ExtractionTestResult] = []
+    all_results: List[PipelineTestResult] = []
     all_metrics: List[Dict] = []
 
-    for name, extractor in EXTRACTION_STRATEGIES.items():
-        results: List[ExtractionTestResult] = []
-        times: List[float] = []
+    for intent_name, intent_classifier in INTENT_STRATEGIES.items():
+        for ext_name, extractor in EXTRACTION_STRATEGIES.items():
+            label = f"{intent_name}+{ext_name}"
+            results: List[PipelineTestResult] = []
+            times: List[float] = []
 
-        for case in tqdm(sentences, desc=f"Extraction [{name}]"):
-            t0 = time.perf_counter()
-            ext = extractor(case.text)
-            elapsed = time.perf_counter() - t0
-            times.append(elapsed)
+            for case in tqdm(sentences, desc=f"NLP [{label}]"):
+                t0 = time.perf_counter()
+                intent = intent_classifier(case.text)
 
-            complete = (
-                ext.departure is not None
-                and ext.arrival is not None
-                and ext.error is None
-            )
-            partial = (
-                not complete
-                and ext.error is None
-                and (ext.departure is not None or ext.arrival is not None)
-            )
-            passed = _check_extraction(ext, case)
+                if intent.name != "TRIP":
+                    elapsed = time.perf_counter() - t0
+                    times.append(elapsed)
+                    results.append(
+                        PipelineTestResult(
+                            sentence_id=case.case_id,
+                            sentence=case.text,
+                            strategy=label,
+                            expected_intent=case.intent_gt,
+                            predicted_intent=intent.name,
+                            departure=None,
+                            arrival=None,
+                            departure_gt=case.departure_gt,
+                            arrival_gt=case.arrival_gt,
+                            execution_time=elapsed,
+                            error="intent_filtered",
+                            is_complete=False,
+                            departure_correct=False,
+                            arrival_correct=False,
+                            passed=(case.intent_gt != "TRIP"),
+                        )
+                    )
+                    continue
 
-            results.append(
-                ExtractionTestResult(
-                    sentence_id=case.case_id,
-                    sentence=case.text,
-                    strategy=name,
-                    expected_output=case.intent_gt,
-                    execution_time=elapsed,
-                    departure=ext.departure,
-                    arrival=ext.arrival,
-                    error=ext.error,
-                    is_complete=complete,
-                    is_partial=partial,
-                    passed=passed,
+                ext = extractor(case.text)
+                elapsed = time.perf_counter() - t0
+                times.append(elapsed)
+
+                is_complete = (
+                    ext.departure is not None
+                    and ext.arrival is not None
+                    and ext.error is None
                 )
+                dep_correct = (
+                    ext.departure is not None and ext.departure == case.departure_gt
+                )
+                arr_correct = ext.arrival is not None and ext.arrival == case.arrival_gt
+                # Pipeline passes for TRIP if both stations correct;
+                # for non-TRIP if extractor didn't complete (no false route).
+                passed = (case.intent_gt == "TRIP" and dep_correct and arr_correct) or (
+                    case.intent_gt != "TRIP" and not is_complete
+                )
+
+                results.append(
+                    PipelineTestResult(
+                        sentence_id=case.case_id,
+                        sentence=case.text,
+                        strategy=label,
+                        expected_intent=case.intent_gt,
+                        predicted_intent=intent.name,
+                        departure=ext.departure,
+                        arrival=ext.arrival,
+                        departure_gt=case.departure_gt,
+                        arrival_gt=case.arrival_gt,
+                        execution_time=elapsed,
+                        error=ext.error,
+                        is_complete=is_complete,
+                        departure_correct=dep_correct,
+                        arrival_correct=arr_correct,
+                        passed=passed,
+                    )
+                )
+
+            all_results.extend(results)
+
+            # --- Aggregate metrics ---
+            total = len(results)
+            passed_ct = sum(r.passed for r in results)
+            complete_ct = sum(r.is_complete for r in results)
+            filtered_ct = sum(1 for r in results if r.error == "intent_filtered")
+            error_ct = sum(
+                1
+                for r in results
+                if r.error is not None and r.error != "intent_filtered"
             )
 
-        all_results.extend(results)
+            # Station accuracy on TRIP cases only
+            trip_results = [r for r in results if r.expected_intent == "TRIP"]
+            dep_correct_ct = sum(r.departure_correct for r in trip_results)
+            arr_correct_ct = sum(r.arrival_correct for r in trip_results)
+            both_correct_ct = sum(
+                r.departure_correct and r.arrival_correct for r in trip_results
+            )
 
-        # Aggregated counts
-        total = len(results)
-        passed_ct = sum(r.passed for r in results)
-        complete_ct = sum(r.is_complete for r in results)
-        partial_ct = sum(r.is_partial for r in results)
-        error_ct = sum(1 for r in results if r.error is not None)
+            # Binary P/R/F1: positive class = "correctly handled TRIP"
+            tp = sum(1 for r in results if r.expected_intent == "TRIP" and r.passed)
+            fp = sum(
+                1 for r in results if r.expected_intent != "TRIP" and r.is_complete
+            )
+            fn = sum(1 for r in results if r.expected_intent == "TRIP" and not r.passed)
+            prec = _sdiv(tp, tp + fp)
+            rec = _sdiv(tp, tp + fn)
+            f1 = _sdiv(2 * prec * rec, prec + rec)
 
-        # Binary classification: TRIP as positive (exact-match extraction)
-        tp = sum(1 for r in results if r.expected_output == "TRIP" and r.passed)
-        fp = sum(1 for r in results if r.expected_output != "TRIP" and r.is_complete)
-        fn = sum(1 for r in results if r.expected_output == "TRIP" and not r.passed)
-        prec = _sdiv(tp, tp + fp)
-        rec = _sdiv(tp, tp + fn)
-        f1 = _sdiv(2 * prec * rec, prec + rec)
-
-        # Per-category accuracy
-        categories = sorted(set(r.expected_output for r in results))
-        cat_acc: Dict[str, float] = {}
-        for cat in categories:
-            cr = [r for r in results if r.expected_output == cat]
-            cat_acc[cat] = _sdiv(sum(r.passed for r in cr), len(cr))
-
-        all_metrics.append(
-            {
-                "strategy": name,
-                "total": total,
-                "passed": passed_ct,
-                "accuracy": _sdiv(passed_ct, total),
-                "complete_count": complete_ct,
-                "partial_count": partial_ct,
-                "error_count": error_ct,
-                "complete_rate": _sdiv(complete_ct, total),
-                "partial_rate": _sdiv(partial_ct, total),
-                "error_rate": _sdiv(error_ct, total),
-                "precision": prec,
-                "recall": rec,
-                "f1": f1,
-                "category_accuracy": cat_acc,
-                "timing": _timing_stats(times),
+            # Intent confusion matrix
+            intent_classes = sorted(
+                set(r.expected_intent for r in results)
+                | set(r.predicted_intent for r in results)
+            )
+            cm: Counter = Counter(
+                (r.expected_intent, r.predicted_intent) for r in results
+            )
+            cm_dict: Dict[str, Dict[str, int]] = {
+                cls_e: {cls_p: cm.get((cls_e, cls_p), 0) for cls_p in intent_classes}
+                for cls_e in intent_classes
             }
-        )
+
+            # Per-category accuracy
+            categories = sorted(set(r.expected_intent for r in results))
+            cat_acc: Dict[str, float] = {
+                cat: _sdiv(
+                    sum(r.passed for r in results if r.expected_intent == cat),
+                    sum(1 for r in results if r.expected_intent == cat),
+                )
+                for cat in categories
+            }
+
+            all_metrics.append(
+                {
+                    "strategy": label,
+                    "intent_strategy": intent_name,
+                    "ext_strategy": ext_name,
+                    "total": total,
+                    "passed": passed_ct,
+                    "accuracy": _sdiv(passed_ct, total),
+                    "complete_count": complete_ct,
+                    "filtered_count": filtered_ct,
+                    "error_count": error_ct,
+                    "complete_rate": _sdiv(complete_ct, total),
+                    "filtered_rate": _sdiv(filtered_ct, total),
+                    "error_rate": _sdiv(error_ct, total),
+                    "trip_total": len(trip_results),
+                    "departure_correct": dep_correct_ct,
+                    "arrival_correct": arr_correct_ct,
+                    "both_correct": both_correct_ct,
+                    "departure_accuracy": _sdiv(dep_correct_ct, len(trip_results)),
+                    "arrival_accuracy": _sdiv(arr_correct_ct, len(trip_results)),
+                    "both_accuracy": _sdiv(both_correct_ct, len(trip_results)),
+                    "precision": prec,
+                    "recall": rec,
+                    "f1": f1,
+                    "category_accuracy": cat_acc,
+                    "confusion_matrix": cm_dict,
+                    "intent_classes": intent_classes,
+                    "timing": _timing_stats(times),
+                }
+            )
 
     return all_results, all_metrics
 
 
 # ---------------------------------------------------------------------------
-# Intent evaluation
+# CSV failure export
 # ---------------------------------------------------------------------------
-def evaluate_intent() -> Tuple[List[IntentTestResult], List[Dict]]:
-    """Evaluate all intent strategies and compute metrics."""
-    sentences = _load_sentences()
-    all_results: List[IntentTestResult] = []
-    all_metrics: List[Dict] = []
-
-    for name, classifier in INTENT_STRATEGIES.items():
-        results: List[IntentTestResult] = []
-        times: List[float] = []
-
-        for case in tqdm(sentences, desc=f"Intent [{name}]"):
-            exp_intent = case.intent_gt
-            t0 = time.perf_counter()
-            intent = classifier(case.text)
-            elapsed = time.perf_counter() - t0
-            times.append(elapsed)
-
-            pred_intent = intent.name
-            passed = pred_intent == exp_intent
-
-            results.append(
-                IntentTestResult(
-                    sentence_id=case.case_id,
-                    sentence=case.text,
-                    strategy=name,
-                    expected_intent=exp_intent,
-                    predicted_intent=pred_intent,
-                    execution_time=elapsed,
-                    passed=passed,
-                )
-            )
-
-        all_results.extend(results)
-
-        total = len(results)
-        passed_ct = sum(r.passed for r in results)
-
-        # Per-class precision, recall, F1
-        intent_classes = sorted(
-            set(
-                [r.expected_intent for r in results]
-                + [r.predicted_intent for r in results]
-            )
-        )
-        per_class: Dict[str, Dict[str, float]] = {}
-        for cls in intent_classes:
-            c_tp = sum(
-                1
-                for r in results
-                if r.expected_intent == cls and r.predicted_intent == cls
-            )
-            c_fp = sum(
-                1
-                for r in results
-                if r.expected_intent != cls and r.predicted_intent == cls
-            )
-            c_fn = sum(
-                1
-                for r in results
-                if r.expected_intent == cls and r.predicted_intent != cls
-            )
-            p = _sdiv(c_tp, c_tp + c_fp)
-            r_val = _sdiv(c_tp, c_tp + c_fn)
-            f = _sdiv(2 * p * r_val, p + r_val)
-            per_class[cls] = {
-                "precision": p,
-                "recall": r_val,
-                "f1": f,
-                "support": c_tp + c_fn,
-            }
-
-        # Confusion matrix
-        cm: Counter = Counter()
-        for r in results:
-            cm[(r.expected_intent, r.predicted_intent)] += 1
-        cm_dict: Dict[str, Dict[str, int]] = {}
-        for cls_e in intent_classes:
-            cm_dict[cls_e] = {}
-            for cls_p in intent_classes:
-                cm_dict[cls_e][cls_p] = cm.get((cls_e, cls_p), 0)
-
-        # Macro and weighted F1
-        macro_f1 = (
-            statistics.mean([m["f1"] for m in per_class.values()]) if per_class else 0.0
-        )
-        weighted_f1 = _sdiv(
-            sum(m["f1"] * m["support"] for m in per_class.values()),
-            total,
-        )
-
-        all_metrics.append(
-            {
-                "strategy": name,
-                "total": total,
-                "passed": passed_ct,
-                "accuracy": _sdiv(passed_ct, total),
-                "per_class": per_class,
-                "confusion_matrix": cm_dict,
-                "macro_f1": macro_f1,
-                "weighted_f1": weighted_f1,
-                "timing": _timing_stats(times),
-            }
-        )
-
-    return all_results, all_metrics
+def save_failures_csv(results: List[PipelineTestResult], results_dir: Path) -> None:
+    """Write one CSV per strategy containing only the failed cases."""
+    strategies = sorted({r.strategy for r in results})
+    for strategy in strategies:
+        failures = [r for r in results if r.strategy == strategy and not r.passed]
+        if not failures:
+            continue
+        csv_path = results_dir / f"failures_{strategy}.csv"
+        fieldnames = [
+            "sentence_id",
+            "sentence",
+            "expected_intent",
+            "predicted_intent",
+            "departure_gt",
+            "arrival_gt",
+            "departure",
+            "arrival",
+            "is_complete",
+            "departure_correct",
+            "arrival_correct",
+            "error",
+            "execution_time",
+        ]
+        with csv_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(asdict(r) for r in failures)
+        print(f"  Failures CSV: {csv_path} ({len(failures)} cases)")
 
 
 # ---------------------------------------------------------------------------
 # PDF report generation
 # ---------------------------------------------------------------------------
 def generate_nlp_pdf(
-    ext_results: List[ExtractionTestResult],
-    ext_metrics: List[Dict],
-    int_results: List[IntentTestResult],
-    int_metrics: List[Dict],
+    results: List[PipelineTestResult],
+    metrics: List[Dict],
     pdf_path: Path,
 ) -> None:
-    """Generate a comprehensive NLP evaluation PDF report."""
+    """Generate a NLP pipeline evaluation PDF report."""
     try:
         from reportlab.lib import colors
         from reportlab.lib.enums import TA_CENTER
@@ -393,13 +416,12 @@ def generate_nlp_pdf(
     doc = SimpleDocTemplate(
         str(pdf_path),
         pagesize=letter,
-        title="NLP Strategies Evaluation",
-        subject="Travel Order Resolver - NLP Performance Report",
+        title="NLP Pipeline Evaluation",
+        subject="Travel Order Resolver - NLP Pipeline Report",
     )
     story = []
     styles = getSampleStyleSheet()
 
-    # Custom styles
     title_style = ParagraphStyle(
         "CustomTitle",
         parent=styles["Heading1"],
@@ -422,7 +444,6 @@ def generate_nlp_pdf(
         fontSize=11,
         textColor=colors.HexColor("#555555"),
     )
-
     header_table_style = TableStyle(
         [
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f6feb")),
@@ -436,7 +457,6 @@ def generate_nlp_pdf(
     )
 
     def kv_table(data: list, col1: float = 2.5, col2: float = 2.5) -> Table:
-        """Create a key-value style table."""
         t = Table(data, colWidths=[col1 * inch, col2 * inch])
         t.setStyle(
             TableStyle(
@@ -452,7 +472,6 @@ def generate_nlp_pdf(
         return t
 
     def timing_table(ts: Dict[str, float]) -> Table:
-        """Create a timing statistics table."""
         return kv_table(
             [
                 ["Mean", f"{ts['mean'] * 1000:.2f} ms"],
@@ -464,18 +483,48 @@ def generate_nlp_pdf(
             ]
         )
 
+    def confusion_matrix_table(cm: Dict, classes: List[str]) -> Table:
+        cm_data = [["Expected \\ Predicted"] + classes]
+        for cls_e in classes:
+            row = [cls_e] + [str(cm[cls_e].get(cls_p, 0)) for cls_p in classes]
+            cm_data.append(row)
+        col_w = [1.5 * inch] + [1.0 * inch] * len(classes)
+        t = Table(cm_data, colWidths=col_w)
+        cm_styles = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f6feb")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#f0f0f0")),
+            ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ]
+        for i in range(len(classes)):
+            cm_styles.append(
+                (
+                    "BACKGROUND",
+                    (i + 1, i + 1),
+                    (i + 1, i + 1),
+                    colors.HexColor("#d4edda"),
+                )
+            )
+        t.setStyle(TableStyle(cm_styles))
+        return t
+
     # ===== TITLE & SUMMARY =====
-    story.append(Paragraph("NLP Strategies Evaluation", title_style))
+    story.append(Paragraph("NLP Pipeline Evaluation", title_style))
     story.append(Spacer(1, 0.2 * inch))
 
     story.append(Paragraph("Summary", heading_style))
-    n_sentences = len(ext_results) // max(len(ext_metrics), 1)
+    n_sentences = len(results) // max(len(metrics), 1)
     story.append(
         kv_table(
             [
-                ["Extraction Strategies", str(len(ext_metrics))],
-                ["Intent Strategies", str(len(int_metrics))],
+                ["Pipeline Combinations", str(len(metrics))],
                 ["Test Sentences", str(n_sentences)],
+                ["Dataset", _DATASET_NAME],
                 ["Timestamp", time.strftime("%Y-%m-%d %H:%M:%S")],
             ],
             col1=3,
@@ -484,12 +533,15 @@ def generate_nlp_pdf(
     )
     story.append(Spacer(1, 0.3 * inch))
 
-    # ===== EXTRACTION STRATEGIES =====
-    story.append(Paragraph("Station Extraction Evaluation", heading_style))
+    # ===== PER-COMBINATION DETAIL =====
+    story.append(Paragraph("Results by Strategy Combination", heading_style))
 
-    for m in ext_metrics:
+    for m in metrics:
         story.append(
-            Paragraph(f"{m['strategy'].upper()} Extractor", styles["Heading3"])
+            Paragraph(
+                f"{m['intent_strategy'].upper()} \u2192 {m['ext_strategy'].upper()}",
+                styles["Heading3"],
+            )
         )
 
         # Classification metrics
@@ -501,9 +553,9 @@ def generate_nlp_pdf(
                         "Overall Accuracy",
                         f"{m['accuracy'] * 100:.2f}% ({m['passed']}/{m['total']})",
                     ],
-                    ["Precision (CORRECT)", f"{m['precision'] * 100:.2f}%"],
-                    ["Recall (CORRECT)", f"{m['recall'] * 100:.2f}%"],
-                    ["F1 Score (CORRECT)", f"{m['f1'] * 100:.2f}%"],
+                    ["Precision (TRIP)", f"{m['precision'] * 100:.2f}%"],
+                    ["Recall (TRIP)", f"{m['recall'] * 100:.2f}%"],
+                    ["F1 Score (TRIP)", f"{m['f1'] * 100:.2f}%"],
                 ]
             )
         )
@@ -519,21 +571,49 @@ def generate_nlp_pdf(
         story.append(t)
         story.append(Spacer(1, 0.15 * inch))
 
-        # Extraction breakdown
-        story.append(Paragraph("Extraction Breakdown", subheading_style))
+        # Intent confusion matrix
+        story.append(Paragraph("Intent Confusion Matrix", subheading_style))
+        story.append(confusion_matrix_table(m["confusion_matrix"], m["intent_classes"]))
+        story.append(Spacer(1, 0.15 * inch))
+
+        # Station extraction accuracy (TRIP sentences only)
+        story.append(
+            Paragraph(
+                f"Station Extraction Accuracy (TRIP only, n={m['trip_total']})",
+                subheading_style,
+            )
+        )
         story.append(
             kv_table(
                 [
                     [
-                        "Complete Extractions",
-                        f"{m['complete_rate'] * 100:.2f}% ({m['complete_count']})",
+                        "Departure correct",
+                        f"{m['departure_accuracy'] * 100:.2f}% ({m['departure_correct']}/{m['trip_total']})",
                     ],
                     [
-                        "Partial Extractions",
-                        f"{m['partial_rate'] * 100:.2f}% ({m['partial_count']})",
+                        "Arrival correct",
+                        f"{m['arrival_accuracy'] * 100:.2f}% ({m['arrival_correct']}/{m['trip_total']})",
                     ],
                     [
-                        "Errors",
+                        "Both correct",
+                        f"{m['both_accuracy'] * 100:.2f}% ({m['both_correct']}/{m['trip_total']})",
+                    ],
+                ]
+            )
+        )
+        story.append(Spacer(1, 0.15 * inch))
+
+        # Pipeline breakdown
+        story.append(Paragraph("Pipeline Breakdown", subheading_style))
+        story.append(
+            kv_table(
+                [
+                    [
+                        "Filtered by Intent",
+                        f"{m['filtered_rate'] * 100:.2f}% ({m['filtered_count']})",
+                    ],
+                    [
+                        "Extractor Errors",
                         f"{m['error_rate'] * 100:.2f}% ({m['error_count']})",
                     ],
                 ]
@@ -542,135 +622,41 @@ def generate_nlp_pdf(
         story.append(Spacer(1, 0.15 * inch))
 
         # Timing
-        story.append(Paragraph("Timing", subheading_style))
+        story.append(Paragraph("Timing (intent + extraction)", subheading_style))
         story.append(timing_table(m["timing"]))
         story.append(Spacer(1, 0.3 * inch))
 
-    story.append(PageBreak())
-
-    # ===== EXTRACTION COMPARISON TABLE =====
-    if len(ext_metrics) > 1:
-        story.append(Paragraph("Extraction Strategy Comparison", heading_style))
-        cmp_data = [["Metric"] + [m["strategy"].upper() for m in ext_metrics]]
+    # ===== COMPARISON TABLE (when more than one combination) =====
+    if len(metrics) > 1:
+        story.append(PageBreak())
+        story.append(Paragraph("Strategy Comparison", heading_style))
+        cmp_data = [["Metric"] + [m["strategy"] for m in metrics]]
+        cmp_data.append(["Accuracy"] + [f"{m['accuracy'] * 100:.1f}%" for m in metrics])
         cmp_data.append(
-            ["Accuracy"] + [f"{m['accuracy'] * 100:.1f}%" for m in ext_metrics]
+            ["Precision"] + [f"{m['precision'] * 100:.1f}%" for m in metrics]
+        )
+        cmp_data.append(["Recall"] + [f"{m['recall'] * 100:.1f}%" for m in metrics])
+        cmp_data.append(["F1"] + [f"{m['f1'] * 100:.1f}%" for m in metrics])
+        cmp_data.append(
+            ["Departure acc."]
+            + [f"{m['departure_accuracy'] * 100:.1f}%" for m in metrics]
         )
         cmp_data.append(
-            ["Precision"] + [f"{m['precision'] * 100:.1f}%" for m in ext_metrics]
-        )
-        cmp_data.append(["Recall"] + [f"{m['recall'] * 100:.1f}%" for m in ext_metrics])
-        cmp_data.append(["F1"] + [f"{m['f1'] * 100:.1f}%" for m in ext_metrics])
-        cmp_data.append(
-            ["Mean Time"]
-            + [f"{m['timing']['mean'] * 1000:.1f} ms" for m in ext_metrics]
+            ["Arrival acc."] + [f"{m['arrival_accuracy'] * 100:.1f}%" for m in metrics]
         )
         cmp_data.append(
-            ["Median Time"]
-            + [f"{m['timing']['median'] * 1000:.1f} ms" for m in ext_metrics]
+            ["Intent Filtered"] + [f"{m['filtered_rate'] * 100:.1f}%" for m in metrics]
         )
         cmp_data.append(
-            ["P95 Time"] + [f"{m['timing']['p95'] * 1000:.1f} ms" for m in ext_metrics]
+            ["Mean Time"] + [f"{m['timing']['mean'] * 1000:.1f} ms" for m in metrics]
         )
-
-        col_w = [1.5 * inch] + [1.5 * inch] * len(ext_metrics)
+        cmp_data.append(
+            ["P95 Time"] + [f"{m['timing']['p95'] * 1000:.1f} ms" for m in metrics]
+        )
+        col_w = [1.8 * inch] + [1.5 * inch] * len(metrics)
         t = Table(cmp_data, colWidths=col_w)
         t.setStyle(header_table_style)
         story.append(t)
-        story.append(Spacer(1, 0.3 * inch))
-
-    # ===== INTENT STRATEGIES =====
-    story.append(Paragraph("Intent Classification Evaluation", heading_style))
-
-    for m in int_metrics:
-        story.append(
-            Paragraph(f"{m['strategy'].upper()} Classifier", styles["Heading3"])
-        )
-
-        # Overall metrics
-        story.append(Paragraph("Overall Metrics", subheading_style))
-        story.append(
-            kv_table(
-                [
-                    [
-                        "Accuracy",
-                        f"{m['accuracy'] * 100:.2f}% ({m['passed']}/{m['total']})",
-                    ],
-                    ["Macro F1", f"{m['macro_f1'] * 100:.2f}%"],
-                    ["Weighted F1", f"{m['weighted_f1'] * 100:.2f}%"],
-                ]
-            )
-        )
-        story.append(Spacer(1, 0.15 * inch))
-
-        # Per-class precision / recall / F1
-        story.append(Paragraph("Per-Class Metrics", subheading_style))
-        pc_data = [["Class", "Precision", "Recall", "F1", "Support"]]
-        for cls, vals in sorted(m["per_class"].items()):
-            pc_data.append(
-                [
-                    cls,
-                    f"{vals['precision'] * 100:.1f}%",
-                    f"{vals['recall'] * 100:.1f}%",
-                    f"{vals['f1'] * 100:.1f}%",
-                    str(vals["support"]),
-                ]
-            )
-        t = Table(
-            pc_data,
-            colWidths=[
-                1.2 * inch,
-                1.0 * inch,
-                1.0 * inch,
-                1.0 * inch,
-                0.8 * inch,
-            ],
-        )
-        t.setStyle(header_table_style)
-        story.append(t)
-        story.append(Spacer(1, 0.15 * inch))
-
-        # Confusion matrix
-        cm = m["confusion_matrix"]
-        classes = sorted(cm.keys())
-        story.append(Paragraph("Confusion Matrix", subheading_style))
-        cm_data = [["Expected \\ Predicted"] + classes]
-        for cls_e in classes:
-            row = [cls_e]
-            for cls_p in classes:
-                row.append(str(cm[cls_e].get(cls_p, 0)))
-            cm_data.append(row)
-
-        col_w = [1.5 * inch] + [1.0 * inch] * len(classes)
-        t = Table(cm_data, colWidths=col_w)
-        cm_styles = [
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f6feb")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#f0f0f0")),
-            ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ]
-        # Highlight diagonal cells in green
-        for i in range(len(classes)):
-            cm_styles.append(
-                (
-                    "BACKGROUND",
-                    (i + 1, i + 1),
-                    (i + 1, i + 1),
-                    colors.HexColor("#d4edda"),
-                )
-            )
-        t.setStyle(TableStyle(cm_styles))
-        story.append(t)
-        story.append(Spacer(1, 0.15 * inch))
-
-        # Timing
-        story.append(Paragraph("Timing", subheading_style))
-        story.append(timing_table(m["timing"]))
-        story.append(Spacer(1, 0.3 * inch))
 
     doc.build(story)
 
@@ -680,33 +666,28 @@ def generate_nlp_pdf(
 # ---------------------------------------------------------------------------
 @pytest.mark.slow
 def test_evaluate_nlp_strategies():
-    """Evaluate NLP strategies and generate PDF report."""
+    """Evaluate NLP pipelines and generate PDF + CSV failure reports."""
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    ext_results, ext_metrics = evaluate_extraction()
-    int_results, int_metrics = evaluate_intent()
+    results, metrics = evaluate_pipeline()
 
     pdf_path = RESULTS_DIR / "nlp_evaluation.pdf"
-    generate_nlp_pdf(ext_results, ext_metrics, int_results, int_metrics, pdf_path)
-
+    generate_nlp_pdf(results, metrics, pdf_path)
     print(f"\n  PDF report saved to: {pdf_path}")
 
-    for m in ext_metrics:
+    save_failures_csv(results, RESULTS_DIR)
+
+    for m in metrics:
         print(
-            f"  Extraction [{m['strategy']}]: "
+            f"  [{m['strategy']}]: "
             f"accuracy={m['accuracy'] * 100:.1f}% "
             f"P={m['precision'] * 100:.1f}% "
             f"R={m['recall'] * 100:.1f}% "
-            f"F1={m['f1'] * 100:.1f}%"
-        )
-    for m in int_metrics:
-        print(
-            f"  Intent [{m['strategy']}]: "
-            f"accuracy={m['accuracy'] * 100:.1f}% "
-            f"macro-F1={m['macro_f1'] * 100:.1f}%"
+            f"F1={m['f1'] * 100:.1f}% "
+            f"dep={m['departure_accuracy'] * 100:.1f}% "
+            f"arr={m['arrival_accuracy'] * 100:.1f}% "
+            f"filtered={m['filtered_rate'] * 100:.1f}%"
         )
 
-    assert ext_results, "No extraction results generated"
-    assert int_results, "No intent results generated"
-    assert any(r.passed for r in ext_results), "No extraction tests passed"
-    assert any(r.passed for r in int_results), "No intent tests passed"
+    assert results, "No pipeline results generated"
+    assert any(r.passed for r in results), "No pipeline tests passed"

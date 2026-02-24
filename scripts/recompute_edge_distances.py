@@ -28,7 +28,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-
 OSRM_BASE_URL = "https://router.project-osrm.org/route/v1/driving/"
 
 
