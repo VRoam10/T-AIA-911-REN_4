@@ -32,14 +32,18 @@ class NLPConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="TOR_NLP_")
 
-    default_strategy: Literal["rule_based", "hf_ner", "spacy"] = "rule_based"
+    default_strategy: Literal["rule_based", "hf_ner", "spacy", "finetuned_ner"] = (
+        "rule_based"
+    )
     hf_ner_model: str = "Jean-Baptiste/camembert-ner"
     hf_ner_dates_model: str = "Jean-Baptiste/camembert-ner-with-dates"
     spacy_model: str = "fr_core_news_md"
+    finetuned_ner_model: str = "training/models/ner-camembert"
 
     # Intent classification settings
-    intent_strategy: Literal["rule_based", "hf_xnli"] = "rule_based"
+    intent_strategy: Literal["rule_based", "hf_xnli", "finetuned_intent"] = "rule_based"
     hf_intent_model: str = "joeddav/xlm-roberta-large-xnli"
+    finetuned_intent_model: str = "training/models/intent-camembert"
     intent_confidence_threshold: float = 0.5
 
 

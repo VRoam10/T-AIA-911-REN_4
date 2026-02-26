@@ -150,10 +150,31 @@ class Container:
         cache: InMemoryCache[Any] = InMemoryCache(name="global")
         container.register(CachePort, lambda: cache)
 
-        # NLP
+        # Intent classifier based on config
+        def create_intent_classifier() -> IntentClassifierPort:
+            strategy = config.nlp.intent_strategy
+            if strategy == "hf_xnli":
+                from .adapters.nlp import HuggingFaceIntentClassifier
+
+                return HuggingFaceIntentClassifier(
+                    model_id=config.nlp.hf_intent_model,
+                    cache=cache,
+                    confidence_threshold=config.nlp.intent_confidence_threshold,
+                )
+            elif strategy == "finetuned_intent":
+                from .adapters.nlp import FineTunedIntentClassifier
+
+                return FineTunedIntentClassifier(
+                    model_path=config.nlp.finetuned_intent_model,
+                    cache=cache,
+                    confidence_threshold=config.nlp.intent_confidence_threshold,
+                )
+            else:
+                return RuleBasedIntentClassifier()
+
         container.register(
             IntentClassifierPort,
-            lambda: RuleBasedIntentClassifier(),
+            create_intent_classifier,
         )
 
         # Station extractor based on config
@@ -169,6 +190,14 @@ class Container:
                 from .adapters.nlp import HuggingFaceNERAdapter
 
                 return HuggingFaceNERAdapter(config.nlp, cache)
+            elif strategy == "finetuned_ner":
+                from .adapters.nlp import FineTunedNERAdapter
+
+                return FineTunedNERAdapter(
+                    model_path=config.nlp.finetuned_ner_model,
+                    config=config.nlp,
+                    cache=cache,
+                )
             else:
                 return RuleBasedStationExtractor(config.graph)
 
