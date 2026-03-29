@@ -15,6 +15,7 @@ from src.asr import (
     transcribe_with_progress,
 )
 from src.graph.dijkstra import dijkstra
+from src.graph.dijkstrav2 import AlgoStats, astar, benchmark_both, load_coords
 from src.graph.load_graph import load_graph
 from src.monitoring import clear_torch_cuda_cache, get_gpu_live_stats, log_gpu_memory
 from src.nlp.extract_stations import find_nearest_station
@@ -31,6 +32,7 @@ from src.viz.map import plot_path
 # Load graph for direct route calculation
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 GRAPH = load_graph(str(DATA_DIR / "stations.csv"), str(DATA_DIR / "edges.csv"))
+COORDS = load_coords(str(DATA_DIR / "stations.csv"))
 
 # ============================ CONFIG ============================
 DEFAULT_DEVICE: str = "cuda"  # cuda or cpu
@@ -52,6 +54,7 @@ PIPELINE_STRATEGIES: List[str] = [
     "finetuned_ner",
 ]
 DATE_STRATEGIES: List[DateStrategy] = ["eds", "hf_ner"]
+ALGO_STRATEGIES: List[str] = ["dijkstra", "astar", "comparison"]
 INTENT_STRATEGIES: List[str] = ["rule_based", "hf_xnli", "finetuned_intent"]
 
 LANG_CHOICES: List[str] = ["auto", "fr", "en"]
@@ -85,6 +88,35 @@ def _plain_text_from_srt(full_text: str) -> str:
     return " ".join(lines).strip()
 
 
+def _format_comparison(dijk: AlgoStats, astar_s: AlgoStats) -> str:
+    """Format a human-readable comparison table for both algorithms."""
+    lines = ["🔬 Comparaison Dijkstra vs A* (moyenne sur 10 runs) :"]
+    lines.append(f"   {'Algorithme':<12} {'Nœuds visités':>15} {'Temps (ms)':>12} {'Distance (km)':>14}")
+    lines.append("   " + "-" * 56)
+    lines.append(
+        f"   {'Dijkstra':<12} {dijk.nodes_visited:>15} {dijk.time_ms:>11.3f} {dijk.distance_km:>14.1f}"
+    )
+    lines.append(
+        f"   {'A*':<12} {astar_s.nodes_visited:>15} {astar_s.time_ms:>11.3f} {astar_s.distance_km:>14.1f}"
+    )
+    lines.append("")
+
+    if dijk.time_ms > 0 and astar_s.time_ms > 0:
+        speedup = dijk.time_ms / astar_s.time_ms
+        node_reduction = (1 - astar_s.nodes_visited / max(dijk.nodes_visited, 1)) * 100
+        if speedup >= 1.0:
+            lines.append(
+                f"   🏆 A* est {speedup:.1f}× plus rapide "
+                f"({node_reduction:.0f}% de nœuds en moins explorés)"
+            )
+        else:
+            lines.append(
+                f"   🏆 Dijkstra est {1/speedup:.1f}× plus rapide sur ce trajet"
+            )
+
+    return "\n".join(lines)
+
+
 def _analyze_text(
     plain_text: str,
     *,
@@ -93,6 +125,7 @@ def _analyze_text(
     date_strategy: DateStrategy,
     pipeline_strategy: str,
     intent_strategy: str = "rule_based",
+    algo_strategy: str = "dijkstra",
     audio_meta: str = "",
 ) -> Tuple[str, str]:
     header = (
@@ -151,7 +184,21 @@ def _analyze_text(
                 arr_station = first_dest["station_code"]
 
         if dep_station and arr_station:
-            path, train_distance = dijkstra(GRAPH, dep_station, arr_station)
+            # --- Choisir l'algorithme ---
+            if algo_strategy == "astar":
+                path, train_distance = astar(GRAPH, dep_station, arr_station, COORDS)
+                algo_label = "A*"
+            elif algo_strategy == "comparison":
+                dijk_stats, astar_stats = benchmark_both(
+                    GRAPH, dep_station, arr_station, COORDS
+                )
+                path = astar_stats.path or dijk_stats.path
+                train_distance = astar_stats.distance_km if astar_stats.found else dijk_stats.distance_km
+                algo_label = "A* (comparaison)"
+            else:
+                path, train_distance = dijkstra(GRAPH, dep_station, arr_station)
+                algo_label = "Dijkstra"
+
             if path:
                 path_for_map = path
                 path_str = " -> ".join(path)
@@ -168,7 +215,7 @@ def _analyze_text(
                 )
                 total_distance = train_distance + dep_to_station + arr_to_station
 
-                header += f"🚆 Trajet ferroviaire: {path_str}\n"
+                header += f"🚆 Trajet ferroviaire [{algo_label}]: {path_str}\n"
                 header += f"   Distance train: {train_distance} km\n"
                 if dep_to_station > 1:
                     station_name = (
@@ -185,6 +232,10 @@ def _analyze_text(
                     )
                     header += f"   + {dest_station_name} → {first_dest['name']}: {arr_to_station:.1f} km\n"
                 header += f"   📊 Distance totale estimée: {total_distance:.1f} km\n\n"
+
+                # Afficher la comparaison si demandée
+                if algo_strategy == "comparison":
+                    header += _format_comparison(dijk_stats, astar_stats) + "\n\n"
             else:
                 header += (
                     f"🚆 Aucun trajet trouvé entre {dep_station} et {arr_station}\n\n"
@@ -262,6 +313,7 @@ def transcribe_and_analyze(
     date_strategy: DateStrategy,
     pipeline_strategy: str,
     intent_strategy: str,
+    algo_strategy: str = "dijkstra",
     progress: gr.Progress = gr.Progress(),
 ) -> Tuple[str, str]:
     if not audio_path:
@@ -295,6 +347,7 @@ def transcribe_and_analyze(
         date_strategy=date_strategy,
         pipeline_strategy=pipeline_strategy,
         intent_strategy=intent_strategy,
+        algo_strategy=algo_strategy,
         audio_meta=audio_meta,
     )
 
@@ -307,6 +360,7 @@ def analyze_text_input(
     date_strategy: DateStrategy,
     pipeline_strategy: str,
     intent_strategy: str,
+    algo_strategy: str = "dijkstra",
 ) -> Tuple[str, str]:
     if not text or not text.strip():
         return "❌ Texte vide", "<p></p>"
@@ -318,6 +372,7 @@ def analyze_text_input(
         date_strategy=date_strategy,
         pipeline_strategy=pipeline_strategy,
         intent_strategy=intent_strategy,
+        algo_strategy=algo_strategy,
         audio_meta="",
     )
     return header, map_html
@@ -399,6 +454,12 @@ with gr.Blocks(title="Whisper • SRT style text") as app:
         intent_strategy_dd = gr.Dropdown(
             INTENT_STRATEGIES, value="rule_based", label="🤖 Intent model"
         )
+        algo_strategy_dd = gr.Dropdown(
+            ALGO_STRATEGIES,
+            value="dijkstra",
+            label="🗺️ Algo routage",
+            info="dijkstra = classique | astar = heuristique haversine | comparison = benchmark des deux",
+        )
 
     with gr.Row():
         audio_file = gr.Audio(type="filepath", label="🎵 Fichier audio")
@@ -428,6 +489,7 @@ with gr.Blocks(title="Whisper • SRT style text") as app:
             date_strategy_dd,
             pipeline_strategy_dd,
             intent_strategy_dd,
+            algo_strategy_dd,
         ],
         outputs=[output, map_view],
     )
@@ -440,6 +502,7 @@ with gr.Blocks(title="Whisper • SRT style text") as app:
             date_strategy_dd,
             pipeline_strategy_dd,
             intent_strategy_dd,
+            algo_strategy_dd,
         ],
         outputs=[output, map_view],
     )
